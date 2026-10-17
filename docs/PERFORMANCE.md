@@ -1,6 +1,34 @@
 # Performance report
 
-The cloud runs below fail the 60 FPS / p95 ≤20 ms targets. Restored-code gameplay validation passed, but integrated 400-unit rendering still shows severe stalls under investigation. No representative integrated-GPU desktop or 30-minute real-time browser session has been measured. Do not claim “lag-free.”
+The final cloud run measured 28.14 FPS at 200 units and 19.20 FPS at 400 units, missing the 60 FPS / p95 ≤20 ms targets. Pointer command acknowledgment p95 was 73 ms. Gameplay validation passed. Representative integrated-GPU desktop and 30-minute real-time browser measurements remain unavailable; no “lag-free” claim is made.
+
+## Final integrated measurement
+
+Hardware: Xeon Platinum 8573C, 5 logical CPUs exposed with a 4-CPU cgroup quota, 32 GiB cgroup memory limit, Linux 6.18.55 x86_64. Browser: Chromium 154.0.8037.57 headless, ANGLE Vulkan SwiftShader software graphics. Display: 1920 ×1080, DPR 1, Medium graphics, zoom 0.8. Map: 128 ×128. Opponents: 1 and 3, normal difficulty, 1× game speed. AI, economy, pathfinding, fog and combat remained active.
+
+The profiler prepares developed settlements and exactly 200 or 400 mixed units, submits real validated attack-move commands, warms up for 1.5 seconds, and measures 20 seconds. Combat reduces unit counts. These are repeatable combat fixtures, not evidence of natural population growth in a normal match. A separate Node audit confirmed 67 relocations and zero invalid spawns in the 400-unit fixture. The measured JavaScript asset was `index-BkfMZRRB.js`; the subsequent optional cleanup-marker correction is inactive with the profiler's default cleanup setting.
+
+| Final atlas/HUD fixture | 200 units / 1 AI | 400 units / 3 AI |
+| --- | --- | --- |
+| Seed | PROFILE-200 | PROFILE-400 |
+| Frames / elapsed | 564 / 20,040.7 ms | 384 / 20,002.7 ms |
+| Mean FPS | 28.14 | 19.20 |
+| Frame p50 / p95 / p99 | 16.7 / 100 / 183.3 ms | 33.4 / 150 / 200.1 ms |
+| Worst raw frame interval | 283.3 ms | 383.4 ms |
+| Per-tick simulation p95 | 22.3 ms | 29.8 ms |
+| Rolling renderer CPU average at sample end | 11.14 ms | 12.25 ms |
+| Units at sample start →end | 200 →163 | 400 →291 |
+| Sampled JS heap start →end | 12.32 →32.14 MB | 70.07 →19.48 MB |
+| Unit sprite atlas pages | 4 | 4 |
+| Sprite cache hits / misses / evictions | 198,024 / 668 / 0 | 226,688 / 1,326 / 558 |
+
+Ten actual pointer commands in a freshly restarted 24-unit match reached target-indicator Canvas rendering at p50 6.9 ms and p95/worst 73 ms. This measures Canvas completion, not physical display latency or command acknowledgment during the crowded combat fixtures. Ten restarts changed controlled-GC JS heap from 5,193,132 to 5,336,836 bytes; the following one-second sample advanced 21 simulation ticks. No uncaught exceptions occurred. JS heap can grow and shrink between collections; these snapshots do not measure GPU/native memory or establish a 30-minute memory bound.
+
+The measured playable build was 155,993 raw bytes and 53,795 bytes summed per-file gzip equivalent, comfortably below the 15 MB initial-download budget. The dual-root Pages artifact, including two license/asset manifests, was 338,036 raw / 117,170 gzip-equivalent bytes. These are local build measurements, not verified GitHub transfer bytes. The [raw final report](results/browser-profile.json) records all samples and metadata. `.local/browser-profile.json` is the reproducible script's local output.
+
+The subsequently delivered cleanup-enabled build (`index-BwKxjEXO.js`) is **156,496 raw / 53,955 gzip-equivalent bytes** for the playable files and **339,042 raw / 117,490 gzip-equivalent bytes** for the complete dual-root Pages artifact. Its JavaScript is 138,708 raw / 48,654 gzip bytes; CSS is 16,900 / 4,688. The saved raw profile deliberately retains the bytes of the build actually profiled.
+
+The atlas and HUD changes eliminated multi-second stalls in this final sample; the frame-time target still failed. Short isolated probes produced higher FPS than full integrated runs. Cloud scheduling, software graphics, fixture duration, and cache state affect results; microbenchmarks do not establish full-game performance. No further unmeasured improvement is claimed.
 
 ## Recovered build: first integrated sprite-cache profile
 
@@ -19,7 +47,7 @@ This run used Xeon Platinum 8573C, 5 logical CPUs / 4-CPU quota, 32 GiB memory l
 
 Ten actual pointer commands reached Canvas target-indicator rendering at p50 12.9 ms and p95/worst 68.4 ms. Ten restarts changed controlled-GC JS heap from 5,146,424 to 5,343,700 bytes. The final one-second tick sample advanced only 9 ticks during stalls; this is not evidence of an extra simulation loop. No uncaught exceptions occurred. These memory snapshots do not establish a leak or a long-term bound.
 
-This build contains 155,027 raw bytes / 53,442 summed gzip-equivalent bytes. Both Pages roots plus license manifests total 336,104 raw / 116,464 gzip-equivalent bytes. Actual GitHub transfer size is unverified. The raw report is `.local/browser-profile.json`. A material regression is being diagnosed before any further measured repeat; microbenchmarks alone do not establish integrated gameplay performance.
+This earlier build contains 155,027 raw bytes / 53,442 summed gzip-equivalent bytes. Both Pages roots plus license manifests total 336,104 raw / 116,464 gzip-equivalent bytes. Actual GitHub transfer size is unverified. This observed stall run motivated the reusable sprite atlas and unchanged-HUD caching corrections above; it was not consistently reproduced in shorter probes.
 
 ## Historical preoptimization measurement
 
@@ -47,13 +75,13 @@ Historical one-game production size: 153,641 raw bytes and 53,045 bytes summed p
 
 | Goal | Status |
 | --- | --- |
-| Normal desktop 1080p / 200 units: 60 FPS, p95 ≤20 ms | Failed in historical headless software rendering; representative desktop unmeasured |
-| Visible command acknowledgment ≤100 ms | One historical 64.2 ms sample; final profiler collects 10 samples |
-| 400-unit crowded combat | Historical sample recorded above; optimized repeat pending |
+| Normal desktop 1080p / 200 units: 60 FPS, p95 ≤20 ms | Failed on this cloud software renderer; representative desktop unmeasured |
+| Visible command acknowledgment ≤100 ms | 10 fresh-start samples: p95/worst 73 ms to Canvas completion; crowded-combat latency unmeasured |
+| 400-unit crowded combat | Final 19.20 FPS, p95 150 ms, worst 383.4 ms; target remains unmet |
 | 30-minute match/restarts without worsening performance or unbounded memory | Accelerated simulation and short restart checks are distinct; real-time browser session pending |
-| Initial playable compressed download <15 MB | Historical build ~53 kB gzip equivalent; final size pending |
+| Initial playable compressed download <15 MB | Delivered ~54.0 kB gzip equivalent; actual hosted transfer unverified |
 
-Fresh restored validation passed 78 simulation tests/5 files in 4.34 seconds and 6 production-browser tests in 29.8 seconds. The browser tests cover root and `/aoe1/`, actual gather/deposit, construction, training, movement, attack/conquest, pause, local save/reload and restart. TypeScript and the production build passed.
+Validation passed 78 simulation tests/5 files in 4.12 seconds on the final reusable-install check and the final 6 production-browser tests in 23.2 seconds. The browser tests cover root and `/aoe1/`, actual gather/deposit, construction, training, movement, attack/conquest, pause, local save/reload and restart. Frozen-lock installation, TypeScript and the production build passed. A targeted real-pointer check verified the optional cleanup marker activates only after 20 simulation minutes and leaves fog/hidden-unit state intact.
 
 The saved peaceful soak (`docs/results/soak-peaceful.json`) simulates 30 minutes on hard difficulty with all four seats controlled by identical AI, 180 invariant checks, 2,241 validated commands, no command rejections, and all four civilizations reaching Iron Age. The final combat soak (`docs/results/soak-combat.json`) ran 30 aggregate simulation minutes across two seeded matches: the first ended in legitimate defeat after 19.558 minutes, the second ran the remaining 10.442 minutes. It completed 181 invariant checks, 6,841 commands, zero command rejections, and 18 attack waves in 52.02 wall-clock seconds. These are accelerated headless simulations, not 30 minutes of browser rendering.
 

@@ -24,7 +24,7 @@ npm run soak -- --minutes=30
 
 Browser tests use `/usr/bin/chromium` when present. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` for another installed executable, or `PLAYWRIGHT_USE_BUNDLED_CHROMIUM=1` to use Playwright's downloaded version. CI installs its matching Chromium and required Linux libraries.
 
-The restored code passed **78 simulation tests across 5 files** and **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. The first integrated renderer profile still shows severe stalls in the 400-unit scenario; this is being investigated. See [the performance report](docs/PERFORMANCE.md) for measured evidence and remaining acceptance targets.
+Validation passed **78 simulation tests across 5 files** and **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
 
 ## Controls
 
@@ -89,4 +89,4 @@ Source and original procedural artwork/audio use the [Apache License 2.0](LICENS
 
 ## Release scope and limitations
 
-This release focuses on desktop single-player land skirmishes. Water is decorative and impassable; there are no naval units, multiplayer, diplomacy, campaign, or cloud saves. Art and sound use compact original procedural primitives. Balance and the target 20–40 minute match duration need player feedback. The initial headless software-renderer benchmark failed the frame-rate targets; an optimized renderer is being validated. Representative integrated-GPU desktop and 30-minute real-time browser measurements remain required. Do not interpret headless results as a universal 60 FPS guarantee.
+This release focuses on desktop single-player land skirmishes. Water is decorative and impassable; there are no naval units, multiplayer, diplomacy, campaign, or cloud saves. Art and sound use compact original procedural primitives. Balance and the target 20–40 minute match duration need player feedback. The final headless software-renderer measurements miss the frame-rate targets. Low/Auto graphics reduce cosmetic cost; Custom Game offers Small maps, one rival, and a 50-person cap for smaller matches. Representative integrated-GPU desktop and 30-minute real-time browser measurements remain required. No universal 60 FPS guarantee is made.

@@ -74,6 +74,7 @@ for (const total of [200, 400]) {
             const nx = Math.floor(x+ox)+.5, ny = Math.floor(y+oy)+.5;
             if (e.canStand(unit,nx,ny)) { unit.x = unit.prevX = nx; unit.y = unit.prevY = ny; found = true; }
           }
+          if (!found) throw new Error(`No valid profiling spawn for owner ${p.id}, unit ${i}`);
         }
       }
     }
