@@ -1,0 +1,231 @@
+{
+  "seed": "AURELIA-SOAK-2026",
+  "peaceful": false,
+  "difficulty": "hard",
+  "requestedMinutes": 30,
+  "simulatedMinutes": 30,
+  "wallSeconds": 52.02,
+  "invariantChecks": 181,
+  "maxEntities": 533,
+  "maxPopulation": 53,
+  "commands": 6841,
+  "failures": 0,
+  "failedReasons": {},
+  "attacks": 18,
+  "matches": [
+    {
+      "seed": "AURELIA-SOAK-2026:0",
+      "simulatedMinutes": 19.558,
+      "result": "defeat",
+      "players": [
+        {
+          "id": 0,
+          "age": 2,
+          "population": {
+            "current": 0,
+            "reserved": 0,
+            "cap": 0
+          },
+          "resources": {
+            "food": 20.370000000000005,
+            "wood": 31.885000000000048,
+            "gold": 700.5099999998416,
+            "stone": 50
+          },
+          "stats": {
+            "gathered": 4097.764999999842,
+            "trained": 38,
+            "lost": 44,
+            "kills": 31,
+            "built": 16,
+            "destroyed": 0
+          },
+          "attacks": 2,
+          "defeated": true
+        },
+        {
+          "id": 1,
+          "age": 3,
+          "population": {
+            "current": 0,
+            "reserved": 0,
+            "cap": 5
+          },
+          "resources": {
+            "food": 529.171250000153,
+            "wood": 25.15749999999997,
+            "gold": 541.020625,
+            "stone": 255
+          },
+          "stats": {
+            "gathered": 8985.349375000154,
+            "trained": 73,
+            "lost": 79,
+            "kills": 53,
+            "built": 25,
+            "destroyed": 2
+          },
+          "attacks": 2,
+          "defeated": false
+        },
+        {
+          "id": 2,
+          "age": 3,
+          "population": {
+            "current": 53,
+            "reserved": 1,
+            "cap": 60
+          },
+          "resources": {
+            "food": 582.5606250000816,
+            "wood": 347.91625,
+            "gold": 1354.3375,
+            "stone": 353.62812499999995
+          },
+          "stats": {
+            "gathered": 13208.442500000083,
+            "trained": 89,
+            "lost": 44,
+            "kills": 71,
+            "built": 37,
+            "destroyed": 25
+          },
+          "attacks": 3,
+          "defeated": false
+        },
+        {
+          "id": 3,
+          "age": 3,
+          "population": {
+            "current": 37,
+            "reserved": 3,
+            "cap": 45
+          },
+          "resources": {
+            "food": 801.5425000001711,
+            "wood": 154.16812500000722,
+            "gold": 1766.1687499996556,
+            "stone": 458.17500000000194
+          },
+          "stats": {
+            "gathered": 11758.054374999827,
+            "trained": 79,
+            "lost": 48,
+            "kills": 60,
+            "built": 29,
+            "destroyed": 9
+          },
+          "attacks": 4,
+          "defeated": false
+        }
+      ]
+    },
+    {
+      "seed": "AURELIA-SOAK-2026:1",
+      "simulatedMinutes": 10.442,
+      "result": "playing",
+      "players": [
+        {
+          "id": 0,
+          "age": 1,
+          "population": {
+            "current": 6,
+            "reserved": 0,
+            "cap": 25
+          },
+          "resources": {
+            "food": 17.90500000000003,
+            "wood": 1132.635,
+            "gold": 100,
+            "stone": 150
+          },
+          "stats": {
+            "gathered": 2510.54,
+            "trained": 23,
+            "lost": 23,
+            "kills": 10,
+            "built": 7,
+            "destroyed": 0
+          },
+          "attacks": 1,
+          "defeated": false
+        },
+        {
+          "id": 1,
+          "age": 2,
+          "population": {
+            "current": 30,
+            "reserved": 2,
+            "cap": 40
+          },
+          "resources": {
+            "food": 172.86875,
+            "wood": 620.3425,
+            "gold": 599.095,
+            "stone": 117.60750000000004
+          },
+          "stats": {
+            "gathered": 5369.91375,
+            "trained": 36,
+            "lost": 12,
+            "kills": 8,
+            "built": 18,
+            "destroyed": 1
+          },
+          "attacks": 2,
+          "defeated": false
+        },
+        {
+          "id": 2,
+          "age": 2,
+          "population": {
+            "current": 34,
+            "reserved": 1,
+            "cap": 40
+          },
+          "resources": {
+            "food": 152.39500000000004,
+            "wood": 251.88937500000006,
+            "gold": 458.35749999999996,
+            "stone": 181.859375
+          },
+          "stats": {
+            "gathered": 4594.501249999999,
+            "trained": 36,
+            "lost": 8,
+            "kills": 11,
+            "built": 17,
+            "destroyed": 4
+          },
+          "attacks": 1,
+          "defeated": false
+        },
+        {
+          "id": 3,
+          "age": 1,
+          "population": {
+            "current": 23,
+            "reserved": 0,
+            "cap": 30
+          },
+          "resources": {
+            "food": 125,
+            "wood": 323.75500000000005,
+            "gold": 220,
+            "stone": 150
+          },
+          "stats": {
+            "gathered": 2938.755,
+            "trained": 29,
+            "lost": 12,
+            "kills": 26,
+            "built": 8,
+            "destroyed": 0
+          },
+          "attacks": 3,
+          "defeated": false
+        }
+      ]
+    }
+  ]
+}
