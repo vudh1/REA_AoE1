@@ -1,0 +1,60 @@
+{
+  "seed": "AURELIA-SOAK-2026",
+  "peaceful": true,
+  "difficulty": "hard",
+  "requestedMinutes": 30,
+  "simulatedMinutes": 30,
+  "wallSeconds": 113.562,
+  "invariantChecks": 180,
+  "maxEntities": 591,
+  "maxPopulation": 54,
+  "commands": 2241,
+  "failures": 0,
+  "failedReasons": {},
+  "attacks": 0,
+  "matches": [
+    {
+      "seed": "AURELIA-SOAK-2026:0",
+      "simulatedMinutes": 30,
+      "result": "playing",
+      "players": [
+        {
+          "id": 0,
+          "age": 4,
+          "population": {"current": 54, "reserved": 0, "cap": 60},
+          "resources": {"food": 10455.513437500033, "wood": 9223.000000000491, "gold": 2436.6812499989624, "stone": 1126.9962499998694},
+          "stats": {"gathered": 35867.190937499356, "trained": 46, "lost": 0, "kills": 0, "built": 69, "destroyed": 0},
+          "attacks": 0,
+          "defeated": false
+        },
+        {
+          "id": 1,
+          "age": 4,
+          "population": {"current": 54, "reserved": 0, "cap": 60},
+          "resources": {"food": 9160.684374999732, "wood": 8533.584375001003, "gold": 2371.512499998961, "stone": 642.896875},
+          "stats": {"gathered": 33263.678124999686, "trained": 46, "lost": 0, "kills": 0, "built": 67, "destroyed": 0},
+          "attacks": 0,
+          "defeated": false
+        },
+        {
+          "id": 2,
+          "age": 4,
+          "population": {"current": 54, "reserved": 0, "cap": 60},
+          "resources": {"food": 9438.204374999932, "wood": 7796.634375000455, "gold": 2402.43124999897, "stone": 1061.0456249998695},
+          "stats": {"gathered": 33303.31562499923, "trained": 46, "lost": 0, "kills": 0, "built": 69, "destroyed": 0},
+          "attacks": 0,
+          "defeated": false
+        },
+        {
+          "id": 3,
+          "age": 4,
+          "population": {"current": 54, "reserved": 0, "cap": 60},
+          "resources": {"food": 7687.7956250000325, "wood": 6400.915625000755, "gold": 2349.3749999989604, "stone": 749.8499999999999},
+          "stats": {"gathered": 29342.936249999748, "trained": 46, "lost": 0, "kills": 0, "built": 62, "destroyed": 0},
+          "attacks": 0,
+          "defeated": false
+        }
+      ]
+    }
+  ]
+}
