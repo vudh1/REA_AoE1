@@ -11,6 +11,7 @@ const ellipse=(c:CanvasRenderingContext2D,x:number,y:number,rx:number,ry:number,
 const line=(c:CanvasRenderingContext2D,x1:number,y1:number,x2:number,y2:number,color:string,width=1)=>{c.strokeStyle=color;c.lineWidth=width;c.beginPath();c.moveTo(x1,y1);c.lineTo(x2,y2);c.stroke();};
 const mix=(hex:string,f:number)=>{const n=parseInt(hex.slice(1),16);return `rgb(${Math.round((n>>16)*f)},${Math.round(((n>>8)&255)*f)},${Math.round((n&255)*f)})`;};
 interface Sprite{canvas:HTMLCanvasElement;ox:number;oy:number;}
+interface UnitPose extends Sprite{sx:number;sy:number;slot:number;}
 /** Isometric renderer. Public screen coordinates are browser client pixels. */
 export class Renderer{
  engine?:Engine;selection:number[]=[];hover?:number;
@@ -20,15 +21,19 @@ export class Renderer{
  private ctx:CanvasRenderingContext2D;private camera:Point={x:18,y:18};private dpr=1;
  private autoDetail:0|1|2=1;private renderAverage=0;private renderSamples=0;private fastWindows=0;private qualityWindow=0;private pendingResize=false;private previousQuality:Renderer['quality']='auto';
  private get detail():0|1|2{return this.quality==='auto'?this.autoDetail:this.quality==='low'?0:this.quality==='medium'?1:2;}
- get graphics(){return{effectiveQuality:['low','medium','high'][this.detail],pixelRatio:this.dpr,averageRenderMs:this.renderAverage};}
- private adjustQuality(cost:number,now:number){this.renderAverage=this.renderSamples?this.renderAverage*.95+cost*.05:cost;this.renderSamples++;if(this.quality!=='auto'||this.renderSamples<30||now-this.qualityWindow<1500)return;this.qualityWindow=now;this.renderSamples=0;let next=this.autoDetail;if(this.renderAverage>12){next=Math.max(0,next-1) as 0|1|2;this.fastWindows=0;}else if(this.renderAverage<5){if(++this.fastWindows>=3){next=Math.min(2,next+1) as 0|1|2;this.fastWindows=0;}}else this.fastWindows=0;if(next!==this.autoDetail){this.autoDetail=next;this.tiles.clear();this.sprites.clear();this.unitSprites.clear();this.terrainStamp='';this.pendingResize=true;}}
+ get graphics(){return{effectiveQuality:['low','medium','high'][this.detail],pixelRatio:this.dpr,averageRenderMs:this.renderAverage,unitCache:{entries:this.unitSprites.size,pages:this.unitPages.length,hits:this.unitCacheHits,misses:this.unitCacheMisses,evictions:this.unitCacheEvictions}};}
+ private adjustQuality(cost:number,now:number){this.renderAverage=this.renderSamples?this.renderAverage*.95+cost*.05:cost;this.renderSamples++;if(this.quality!=='auto'||this.renderSamples<30||now-this.qualityWindow<1500)return;this.qualityWindow=now;this.renderSamples=0;let next=this.autoDetail;if(this.renderAverage>12){next=Math.max(0,next-1) as 0|1|2;this.fastWindows=0;}else if(this.renderAverage<5){if(++this.fastWindows>=3){next=Math.min(2,next+1) as 0|1|2;this.fastWindows=0;}}else this.fastWindows=0;if(next!==this.autoDetail){this.autoDetail=next;this.tiles.clear();this.sprites.clear();this.clearUnitSprites();this.terrainStamp='';this.pendingResize=true;}}
  private tiles=new Map<string,HTMLCanvasElement>();private sprites=new Map<string,Sprite>();
- private unitSprites=new Map<string,Sprite>();
+ private unitSprites=new Map<string,UnitPose>();
+ private unitPages:HTMLCanvasElement[]=[];
+ private nextUnitSlot=0;
+ private unitCacheHits=0;private unitCacheMisses=0;private unitCacheEvictions=0;
+ private clearUnitSprites(){this.unitSprites.clear();this.nextUnitSlot=0;this.unitCacheHits=0;this.unitCacheMisses=0;this.unitCacheEvictions=0;}
  private minimapPixels?:ImageData;private terrainLayer?:HTMLCanvasElement;private terrainStamp='';
  private fogVisible:number[]=[];private fogExplored:number[]=[];private fogTick=-100;private mapKey='';private lastCamera='';
  private mini?:HTMLCanvasElement;private miniTick=-100;private miniKey='';private disposed=false;
  constructor(public canvas:HTMLCanvasElement){const c=canvas.getContext('2d',{alpha:false});if(!c)throw new Error('Canvas 2D is unavailable');this.ctx=c;this.resize();}
- setEngine(engine:Engine){this.engine=engine;this.fogTick=-100;this.miniTick=-100;this.mapKey='';this.terrainStamp='';this.unitSprites.clear();}
+ setEngine(engine:Engine){this.engine=engine;this.fogTick=-100;this.miniTick=-100;this.mapKey='';this.terrainStamp='';this.clearUnitSprites();}
  resize(){const r=this.canvas.getBoundingClientRect();this.width=r.width||window.innerWidth;this.height=r.height||window.innerHeight;this.dpr=Math.min(window.devicePixelRatio||1,this.detail===0?1:this.detail===1?1.5:2);const w=Math.round(this.width*this.dpr),h=Math.round(this.height*this.dpr);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);}
  center(x:number,y:number){this.camera={x,y};}
  pan(dx:number,dy:number){this.camera.x-=(dx/TW+dy/TH)/this.zoom;this.camera.y-=(dy/TH-dx/TW)/this.zoom;this.clampCamera();}
@@ -40,7 +45,7 @@ export class Renderer{
  private localWorld(x:number,y:number):Point{const sx=(x-this.width*.5)/this.zoom,sy=(y-this.height*.43)/this.zoom;return{x:this.camera.x+sx/TW+sy/TH,y:this.camera.y+sy/TH-sx/TW};}
  render(alpha=1){
   if(this.disposed)return;const renderStart=performance.now();if(this.pendingResize){this.pendingResize=false;this.resize();}
-  if(this.previousQuality!==this.quality){this.previousQuality=this.quality;this.autoDetail=1;this.renderSamples=0;this.renderAverage=0;this.fastWindows=0;this.qualityWindow=renderStart;this.tiles.clear();this.sprites.clear();this.unitSprites.clear();this.terrainStamp='';this.resize();}
+  if(this.previousQuality!==this.quality){this.previousQuality=this.quality;this.autoDetail=1;this.renderSamples=0;this.renderAverage=0;this.fastWindows=0;this.qualityWindow=renderStart;this.tiles.clear();this.sprites.clear();this.clearUnitSprites();this.terrainStamp='';this.resize();}
   const c=this.ctx;c.setTransform(this.dpr,0,0,this.dpr,0,0);c.globalAlpha=1;c.fillStyle='#15221e';c.fillRect(0,0,this.width,this.height);
   const engine=this.engine;if(!engine)return;const s=engine.state,map=s.map,n=map.size,player=s.players[0];
   const camKey=`${Math.floor(this.camera.x*2)},${Math.floor(this.camera.y*2)},${this.zoom}`,mapKey=`${map.generation}/${map.seed}/${n}`;
@@ -57,7 +62,11 @@ export class Renderer{
   const draw:{entity:Entity;memory:boolean;depth:number}[]=[],shown=new Set<number>();
   for(const e of s.entities){const visible=e.owner===0||!!player?.visible[Math.floor(e.y)*n+Math.floor(e.x)];if(!visible||e.x<x0-5||e.x>x1+5||e.y<y0-5||e.y>y1+5)continue;draw.push({entity:e,memory:false,depth:e.x+e.y});shown.add(e.id);}
   for(const e of Object.values(player?.memory||{})){if(e.kind==='unit'||shown.has(e.id)||player?.visible[Math.floor(e.y)*n+Math.floor(e.x)]||e.x<x0-5||e.x>x1+5||e.y<y0-5||e.y>y1+5)continue;draw.push({entity:e,memory:true,depth:e.x+e.y});}
-  draw.sort((a,b)=>a.depth-b.depth||(a.entity.kind==='building'?-1:1));const selected=new Set(this.selection);if(this.placement)this.drawPlacement(c);
+  draw.sort((a,b)=>a.depth-b.depth||(a.entity.kind==='building'?-1:1));
+  // Finish all atlas writes before the first page read. Interleaved writes/reads
+  // force canvas texture snapshots and costly fences on software GPU backends.
+  for(const item of draw)if(item.entity.kind==='unit')this.unitSprite(item.entity,s.players[item.entity.owner]?.color||TEAM,s.tick,alpha);
+  const selected=new Set(this.selection);if(this.placement)this.drawPlacement(c);
   for(const item of draw){const e=item.entity,x=e.kind==='unit'?e.prevX+(e.x-e.prevX)*alpha:e.x,y=e.kind==='unit'?e.prevY+(e.y-e.prevY)*alpha:e.y,px=(x-y)*32,py=(x+y)*16;if(px<((this.camera.x-this.camera.y)*32-this.width/this.zoom*.5)-160||px>((this.camera.x-this.camera.y)*32+this.width/this.zoom*.5)+160)continue;c.save();c.translate(px,py);if(item.memory)c.globalAlpha=.48;const isSelected=selected.has(e.id),isHover=this.hover===e.id;if(isSelected||isHover)this.selectionRing(c,e,isSelected);const color=s.players[e.owner]?.color||TEAM;if(e.kind==='unit')this.drawUnit(c,e,color,s.tick,alpha);else{const sp=this.entitySprite(e,color);c.drawImage(sp.canvas,-sp.ox,-sp.oy);if(e.kind==='building'&&!e.completed)this.construction(c,e);}if(!item.memory&&(isSelected||isHover||e.hp<e.maxHp&&e.kind!=='resource'))this.health(c,e);if(isSelected&&!item.memory&&e.kind==='building'&&e.rally){const r=e.rally;this.rallyFlag(c,((r.x-r.y)-(x-y))*32,((r.x+r.y)-(x+y))*16,color);}c.restore();}
   // Non-graphic dust and earth-colored fragments provide brief loss feedback.
   for(let i=s.events.length-1;i>=0;i--){const event=s.events[i],elapsed=s.tick-event.tick-1+alpha;if(s.tick-event.tick>12)break;if(event.type!=='death'||event.x===undefined||event.y===undefined||elapsed<0)continue;if(event.owner!==0&&!player?.visible[Math.floor(event.y)*n+Math.floor(event.x)])continue;if(event.x<x0||event.x>x1||event.y<y0||event.y>y1)continue;const t=elapsed/12;if(t>=1)continue;const px=(event.x-event.y)*32,py=(event.x+event.y)*16,scale=event.text.startsWith('Building')?2:1,count=this.detail===0?3:this.detail===1?6:9;c.save();c.globalAlpha=(1-t)*.55;for(let k=0;k<count;k++){const angle=hash(event.tick,k,event.entity||0)*Math.PI*2,r=(3+t*19)*scale*(.5+hash(k,event.tick));ellipse(c,px+Math.cos(angle)*r,py+Math.sin(angle)*r*.4-t*13*scale,(2+t*5)*scale,(1.6+t*3)*scale,k%2?'#b7a77e':'#d0bb8b');}c.globalAlpha=(1-t)*.75;for(let k=0;k<(this.detail===0?2:4);k++){const a=k*1.9+event.tick,x=px+Math.cos(a)*t*24*scale,y=py+Math.sin(a)*t*9*scale-Math.sin(t*Math.PI)*9;poly(c,[[x-2,y],[x,y-3],[x+3,y],[x,y+1]],k%2?'#867451':'#b4a17a');}c.restore();}
@@ -105,27 +114,29 @@ export class Renderer{
  private tower(c:CanvasRenderingContext2D,x:number,y:number,color:string){this.block(c,x,y,14,9,48,'#b5ad93');for(let k=0;k<5;k++)line(c,x-13,y-5-k*8,x,y+2-k*8,'rgba(94,91,70,.23)',1);this.block(c,x,y-48,17,11,7,'#cbc1a3');for(let k=-1;k<=1;k++)this.block(c,x+k*11,y-45-Math.abs(k)*5,3.5,3,8,'#c8bea0');poly(c,[[x-3,y-27],[x-3,y-36],[x+2,y-38],[x+2,y-29]],'#5b6354');this.banner(c,x+6,y-41,color,21);this.flag(c,x,y-63,color,14);}
  private wall(c:CanvasRenderingContext2D,type:BuildingType,color:string){if(type==='gate'){this.block(c,-22,0,10,8,27,'#a9a68b');this.block(c,22,0,10,8,27,'#a9a68b');this.block(c,0,-22,24,8,10,'#c0b89b');poly(c,[[-12,7],[-12,-16],[0,-22],[12,-16],[12,7],[0,13]],'#685f44');for(let k=-2;k<=2;k++)line(c,k*5,9-Math.abs(k)*2,k*5,-18+Math.abs(k)*1.5,'#8c7a50',2);this.banner(c,-24,-25,color,14);this.banner(c,19,-25,color,14);}else{this.block(c,0,1,19,10,26,'#aaa78c');for(let k=-1;k<=1;k++)this.block(c,k*13,1-Math.abs(k)*6,4,4,32,'#bbb49a');for(let k=0;k<3;k++)line(c,-18,-4-k*7,0,5-k*7,'#8e917c',1);}}
  private construction(c:CanvasRenderingContext2D,e:Entity){const r=SIZES[e.type as BuildingType]*28,p=Math.max(0,Math.min(1,e.progress));c.globalAlpha=.85;for(const side of[-1,1]){const x=side*(r-5);line(c,x,1,x,-28-25*p,'#bc9c61',2);line(c,x-5,-12,x+5,-12,'#c8ae75',2);}line(c,-r+5,-26,r-5,-26,'#a18454',2);line(c,-r+5,1,r-5,-26,'#987e51',1);c.globalAlpha=1;c.fillStyle='#25362b';c.fillRect(-22,15,44,3);c.fillStyle='#c7b278';c.fillRect(-22,15,44*p,3);}
- /** Bounded LRU of original vector poses: one small drawImage per visible unit. */
- private drawUnit(c:CanvasRenderingContext2D,e:Entity,color:string,tick:number,alpha:number){
+ /** Small poses share four reusable atlas textures; evictions reuse their slot. */
+ private unitSprite(e:Entity,color:string,tick:number,alpha:number):UnitPose{
   const moving=e.task==='move'||e.task==='attackMove'||Math.hypot(e.x-e.prevX,e.y-e.prevY)>.005;
   const facing=((Math.round((Number.isFinite(e.facing)?e.facing:0)/(Math.PI/4))%8)+8)%8;
   const attacking=e.cooldown>0&&e.orders[0]?.type==='attack',gathering=e.task.startsWith('Gathering')&&e.orders[0]?.target!==undefined;
   const state=attacking?'attack':gathering?'gather':moving?'walk':'idle';
-  const phase=moving?(tick+alpha)*.75+e.id*1.7:(tick+e.id)*.045;
-  const phases=moving?6:4,frame=Math.floor(((phase%(Math.PI*2)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*phases);
+  const phase=(tick+alpha)*.75+e.id*1.7,phases=6;
+  // Stationary breathing is below a pixel; one stationary pose avoids four
+  // interchangeable textures while preserving the six-frame walking animation.
+  const frame=moving?Math.floor(((phase%(Math.PI*2)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*phases):0;
   const key=`${this.detail}/${e.type}/${color}/${facing}/${state}/${moving?1:0}/${frame}/${e.carry>0?e.carryType||'carry':''}`;
   let sprite=this.unitSprites.get(key);
-  if(sprite){this.unitSprites.delete(key);this.unitSprites.set(key,sprite);}
-  else{
-   const canvas=document.createElement('canvas');canvas.width=92;canvas.height=104;const oc=canvas.getContext('2d')!,ox=46,oy=86;oc.translate(ox,oy);
-   // Quantized orientation/phase preserves walking, gathering, attack and cargo poses.
-   const pose={...e,id:0,facing:facing*Math.PI/4,prevX:moving?e.x-.1:e.x,prevY:e.y,task:gathering?'Gathering':moving?'move':'Idle'};
-   const sample=(frame+.5)/phases*Math.PI*2;this.paintUnit(oc,pose,color,sample/(moving?.75:.045),0);
-   sprite={canvas,ox,oy};this.unitSprites.set(key,sprite);
-   if(this.unitSprites.size>768)this.unitSprites.delete(this.unitSprites.keys().next().value!);
-  }
-  c.drawImage(sprite.canvas,-sprite.ox,-sprite.oy);
+  if(sprite){this.unitCacheHits++;this.unitSprites.delete(key);this.unitSprites.set(key,sprite);return sprite;}
+  this.unitCacheMisses++;let slot:number;
+  if(this.unitSprites.size>=768){const oldest=this.unitSprites.keys().next().value!;slot=this.unitSprites.get(oldest)!.slot;this.unitSprites.delete(oldest);this.unitCacheEvictions++;}else slot=this.nextUnitSlot++;
+  const page=Math.floor(slot/192),cell=slot%192,sx=cell%16*64,sy=Math.floor(cell/16)*80,ox=32,oy=68;
+  let canvas=this.unitPages[page];if(!canvas){canvas=document.createElement('canvas');canvas.width=1024;canvas.height=960;this.unitPages[page]=canvas;}
+  const oc=canvas.getContext('2d')!;oc.clearRect(sx,sy,64,80);oc.save();oc.translate(sx+ox,sy+oy);
+  const pose={...e,id:0,facing:facing*Math.PI/4,prevX:moving?e.x-.1:e.x,prevY:e.y,task:gathering?'Gathering':moving?'move':'Idle'};
+  const sample=moving?(frame+.5)/phases*Math.PI*2:0;this.paintUnit(oc,pose,color,sample/(moving?.75:.045),0);oc.restore();
+  sprite={canvas,ox,oy,sx,sy,slot};this.unitSprites.set(key,sprite);return sprite;
  }
+ private drawUnit(c:CanvasRenderingContext2D,e:Entity,color:string,tick:number,alpha:number){const sp=this.unitSprite(e,color,tick,alpha);c.drawImage(sp.canvas,sp.sx,sp.sy,64,80,-sp.ox,-sp.oy,64,80);}
  private paintUnit(c:CanvasRenderingContext2D,e:Entity,color:string,tick:number,alpha:number){
   const moving=e.task==='move'||e.task==='attackMove'||Math.hypot(e.x-e.prevX,e.y-e.prevY)>.005,phase=(tick+alpha)*.75+e.id*1.7,step=moving?Math.sin(phase)*3:Math.sin((tick+e.id)*.045)*.35,facing=Number.isFinite(e.facing)?e.facing:0,dx=Math.cos(facing)-Math.sin(facing),dir=dx<0?-1:1,attack=e.cooldown>0&&e.orders[0]?.type==='attack';
   if(this.detail>0)ellipse(c,1,1,e.type==='cavalry'||e.type==='scout'?13:e.type==='siege'?16:7,e.type==='cavalry'||e.type==='scout'?5:3,'rgba(22,32,22,.27)');c.save();c.scale(dir,1);c.transform(1,(Math.sin(facing)+Math.cos(facing))*.035,0,1,0,0);
@@ -165,5 +176,5 @@ export class Renderer{
   const c=canvas.getContext('2d');if(!c)return;const rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2),w=Math.round((rect.width||160)*dpr),h=Math.round((rect.height||160)*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;c.fillStyle='#17221e';c.fillRect(0,0,w,h);c.drawImage(this.mini!,0,0,w,h);c.strokeStyle='rgba(236,227,191,.8)';c.lineWidth=Math.max(1,dpr*.8);c.beginPath();const corners=[this.localWorld(0,65),this.localWorld(this.width,65),this.localWorld(this.width,this.height-185),this.localWorld(0,this.height-185)];corners.forEach((p,i)=>i?c.lineTo(p.x/n*w,p.y/n*h):c.moveTo(p.x/n*w,p.y/n*h));c.closePath();c.stroke();
  }
  minimapWorld(clientX:number,clientY:number,canvas:HTMLCanvasElement):Point{const r=canvas.getBoundingClientRect(),n=this.engine?.state.map.size||64;return{x:Math.max(0,Math.min(n-1,(clientX-r.left)/r.width*n)),y:Math.max(0,Math.min(n-1,(clientY-r.top)/r.height*n))};}
- destroy(){this.disposed=true;this.tiles.clear();this.sprites.clear();this.unitSprites.clear();this.minimapPixels=undefined;this.engine=undefined;this.terrainLayer=undefined;this.mini=undefined;}
+ destroy(){this.disposed=true;this.tiles.clear();this.sprites.clear();this.clearUnitSprites();this.minimapPixels=undefined;this.unitPages=[];this.engine=undefined;this.terrainLayer=undefined;this.mini=undefined;}
 }
