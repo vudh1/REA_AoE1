@@ -173,7 +173,15 @@ export class Renderer{
     else{mc.fillStyle=s.players[e.owner]?.color||TEAM;const z=e.kind==='building'?2:1;mc.fillRect(e.x-z/2,e.y-z/2,z,z);}}
    this.miniTick=s.tick;this.miniKey=key;
   }
-  const c=canvas.getContext('2d');if(!c)return;const rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2),w=Math.round((rect.width||160)*dpr),h=Math.round((rect.height||160)*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;c.fillStyle='#17221e';c.fillRect(0,0,w,h);c.drawImage(this.mini!,0,0,w,h);c.strokeStyle='rgba(236,227,191,.8)';c.lineWidth=Math.max(1,dpr*.8);c.beginPath();const corners=[this.localWorld(0,65),this.localWorld(this.width,65),this.localWorld(this.width,this.height-185),this.localWorld(0,this.height-185)];corners.forEach((p,i)=>i?c.lineTo(p.x/n*w,p.y/n*h):c.moveTo(p.x/n*w,p.y/n*h));c.closePath();c.stroke();
+  const c=canvas.getContext('2d');if(!c)return;const rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2),w=Math.round((rect.width||160)*dpr),h=Math.round((rect.height||160)*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}c.setTransform(1,0,0,1,0,0);c.imageSmoothingEnabled=false;c.fillStyle='#17221e';c.fillRect(0,0,w,h);c.drawImage(this.mini!,0,0,w,h);
+  // The explicitly enabled late-game aid marks positions only on the minimap.
+  // It does not change sight, explored land, entity rendering or selection.
+  if(s.settings.cleanup&&s.tick>=24000){
+   const pulse=(s.tick%40)/40,r=(2.5+pulse*3)*dpr;c.save();c.strokeStyle='#e4c780';c.lineWidth=Math.max(1,dpr*.8);c.globalAlpha=.85-pulse*.45;
+   for(const e of s.entities){if(e.owner<=0||e.hp<=0||(e.kind!=='unit'&&e.kind!=='building'))continue;const x=e.x/n*w,y=e.y/n*h;c.beginPath();c.ellipse(x,y,r,r,0,0,Math.PI*2);c.moveTo(x-r-2*dpr,y);c.lineTo(x-1*dpr,y);c.moveTo(x+1*dpr,y);c.lineTo(x+r+2*dpr,y);c.moveTo(x,y-r-2*dpr);c.lineTo(x,y-1*dpr);c.moveTo(x,y+1*dpr);c.lineTo(x,y+r+2*dpr);c.stroke();}
+   c.restore();
+  }
+  c.strokeStyle='rgba(236,227,191,.8)';c.lineWidth=Math.max(1,dpr*.8);c.beginPath();const corners=[this.localWorld(0,65),this.localWorld(this.width,65),this.localWorld(this.width,this.height-185),this.localWorld(0,this.height-185)];corners.forEach((p,i)=>i?c.lineTo(p.x/n*w,p.y/n*h):c.moveTo(p.x/n*w,p.y/n*h));c.closePath();c.stroke();
  }
  minimapWorld(clientX:number,clientY:number,canvas:HTMLCanvasElement):Point{const r=canvas.getBoundingClientRect(),n=this.engine?.state.map.size||64;return{x:Math.max(0,Math.min(n-1,(clientX-r.left)/r.width*n)),y:Math.max(0,Math.min(n-1,(clientY-r.top)/r.height*n))};}
  destroy(){this.disposed=true;this.tiles.clear();this.sprites.clear();this.clearUnitSprites();this.minimapPixels=undefined;this.unitPages=[];this.engine=undefined;this.terrainLayer=undefined;this.mini=undefined;}
