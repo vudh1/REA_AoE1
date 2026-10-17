@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { arch, cpus, platform, release, totalmem } from 'node:os';
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (!process.env.PLAYWRIGHT_USE_BUNDLED_CHROMIUM && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -23,6 +24,12 @@ const metadata = await page.evaluate(() => {
   return {userAgent: navigator.userAgent, width: innerWidth, height: innerHeight, dpr: devicePixelRatio, gpu, hardwareConcurrency: navigator.hardwareConcurrency};
 });
 metadata.browser = browser.version();
+metadata.host = {
+  cpuModel: cpus()[0]?.model ?? 'Unknown', logicalCpus: cpus().length,
+  platform: platform(), release: release(), architecture: arch(), hostMemoryBytes: totalmem(),
+  cgroupCpuMax: (await readFile('/sys/fs/cgroup/cpu.max','utf8').catch(()=>'unavailable')).trim(),
+  cgroupMemoryMax: (await readFile('/sys/fs/cgroup/memory.max','utf8').catch(()=>'unavailable')).trim(),
+};
 const results = [];
 for (const total of [200, 400]) {
   const prepared = await page.evaluate(total => {

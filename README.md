@@ -24,7 +24,7 @@ npm run soak -- --minutes=30
 
 Browser tests use `/usr/bin/chromium` when present. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` for another installed executable, or `PLAYWRIGHT_USE_BUNDLED_CHROMIUM=1` to use Playwright's downloaded version. CI installs its matching Chromium and required Linux libraries.
 
-Before the environment recovery, the simulation suite passed 78 tests across 5 files, the production Chromium gameplay suite passed 6 tests, and frozen-lock installation/type checking/build passed. These are historical results; restored-code validation and the optimized-renderer measurements are pending. See [the performance report](docs/PERFORMANCE.md) for evidence and limitations.
+The restored code passed **78 simulation tests across 5 files** and **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. The first integrated renderer profile still shows severe stalls in the 400-unit scenario; this is being investigated. See [the performance report](docs/PERFORMANCE.md) for measured evidence and remaining acceptance targets.
 
 ## Controls
 

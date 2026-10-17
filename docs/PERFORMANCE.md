@@ -1,6 +1,25 @@
 # Performance report
 
-The historical preoptimization cloud run failed the 60 FPS / p95 ≤20 ms targets. Optimized-renderer and restored-code verification are pending. No representative integrated-GPU desktop or 30-minute real-time browser session has been measured. Do not claim “lag-free.”
+The cloud runs below fail the 60 FPS / p95 ≤20 ms targets. Restored-code gameplay validation passed, but integrated 400-unit rendering still shows severe stalls under investigation. No representative integrated-GPU desktop or 30-minute real-time browser session has been measured. Do not claim “lag-free.”
+
+## Recovered build: first integrated sprite-cache profile
+
+This run used Xeon Platinum 8573C, 5 logical CPUs / 4-CPU quota, 32 GiB memory limit, Linux 6.18.55, the same Chromium 154.0.8037.57 and SwiftShader software graphics at 1920 ×1080, DPR 1, Medium. The host CPU changed from the historical 8370C, so this is not a controlled hardware before/after comparison. Both scenarios retained active AI/economy/combat and the fixture methodology below. The measured JavaScript asset was `index-0P1gfjMj.js`.
+
+| Recovered first-cache fixture | 200 units / 1 AI | 400 units / 3 AI |
+| --- | --- | --- |
+| Frames / elapsed | 689 / 20,159.3 ms | 54 / 20,099.6 ms |
+| Mean FPS | 34.18 | 2.69 |
+| Frame p50 / p95 / p99 | 16.7 / 50 / 116.7 ms | 50.1 / 2,083.3 / 6,183.1 ms |
+| Worst raw frame interval | 1,833.2 ms | 6,183.1 ms |
+| Per-tick simulation p95 | 15 ms | 249.55 ms |
+| Rolling renderer CPU average | 13.22 ms | 132.54 ms |
+| Units at sample start →end | 200 →165 | 400 →394 |
+| Sampled JS heap start →end | 12.56 →30.65 MB | 33.13 →34.78 MB |
+
+Ten actual pointer commands reached Canvas target-indicator rendering at p50 12.9 ms and p95/worst 68.4 ms. Ten restarts changed controlled-GC JS heap from 5,146,424 to 5,343,700 bytes. The final one-second tick sample advanced only 9 ticks during stalls; this is not evidence of an extra simulation loop. No uncaught exceptions occurred. These memory snapshots do not establish a leak or a long-term bound.
+
+This build contains 155,027 raw bytes / 53,442 summed gzip-equivalent bytes. Both Pages roots plus license manifests total 336,104 raw / 116,464 gzip-equivalent bytes. Actual GitHub transfer size is unverified. The raw report is `.local/browser-profile.json`. A material regression is being diagnosed before any further measured repeat; microbenchmarks alone do not establish integrated gameplay performance.
 
 ## Historical preoptimization measurement
 
@@ -34,9 +53,9 @@ Historical one-game production size: 153,641 raw bytes and 53,045 bytes summed p
 | 30-minute match/restarts without worsening performance or unbounded memory | Accelerated simulation and short restart checks are distinct; real-time browser session pending |
 | Initial playable compressed download <15 MB | Historical build ~53 kB gzip equivalent; final size pending |
 
-Historical validation: 78 simulation tests/5 files and 6 production-browser tests passed before recovery. The browser tests cover root and `/aoe1/`, actual gather/deposit, construction, training, movement, attack/conquest, pause, local save/reload and restart. Restored sources must be revalidated.
+Fresh restored validation passed 78 simulation tests/5 files in 4.34 seconds and 6 production-browser tests in 29.8 seconds. The browser tests cover root and `/aoe1/`, actual gather/deposit, construction, training, movement, attack/conquest, pause, local save/reload and restart. TypeScript and the production build passed.
 
-The saved peaceful soak (`docs/results/soak-peaceful.json`) simulates 30 minutes on hard difficulty with all four seats controlled by identical AI, 180 invariant checks, 2,241 validated commands, no command rejections, and all four civilizations reaching Iron Age. This is accelerated headless simulation, not 30 minutes of browser rendering. The combat soak after the last wounded-regroup policy correction remains pending.
+The saved peaceful soak (`docs/results/soak-peaceful.json`) simulates 30 minutes on hard difficulty with all four seats controlled by identical AI, 180 invariant checks, 2,241 validated commands, no command rejections, and all four civilizations reaching Iron Age. The final combat soak (`docs/results/soak-combat.json`) ran 30 aggregate simulation minutes across two seeded matches: the first ended in legitimate defeat after 19.558 minutes, the second ran the remaining 10.442 minutes. It completed 181 invariant checks, 6,841 commands, zero command rejections, and 18 attack waves in 52.02 wall-clock seconds. These are accelerated headless simulations, not 30 minutes of browser rendering.
 
 ## Reproduce
 
