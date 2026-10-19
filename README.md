@@ -20,11 +20,13 @@ npm run build
 npx playwright install chromium
 npm run test:browser
 npm run soak -- --minutes=30
+# Include an allied village and three enemies in the soak:
+npm run soak -- --minutes=30 --allies=1
 ```
 
 Browser tests use `/usr/bin/chromium` when present. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` for another installed executable, or `PLAYWRIGHT_USE_BUNDLED_CHROMIUM=1` to use Playwright's downloaded version. CI installs its matching Chromium and required Linux libraries.
 
-Validation passed **99 simulation tests across 6 files** and the previously published **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
+Validation passed **99 simulation tests across 6 files** and **10 production Chromium gameplay tests**, including autonomous allied/enemy economies, team-safe commands, all 37 catalog entries, and native phone selection/orders/panning/construction, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
 
 ## Controls
 
@@ -73,13 +75,13 @@ npm run profile
 
 Vite uses relative asset URLs. The Pages artifact serves the same game at the project root and nested `aoe1/` directory. Both roots include LICENSE and ASSETS.md attribution files.
 
-- Requested canonical endpoint: `https://vudh1.github.io/aoe1/` (lowercase).
-- Current repository endpoint: `https://vudh1.github.io/REA_AoE1/`.
-- Current nested compatibility path: `https://vudh1.github.io/REA_AoE1/aoe1/`.
+- Canonical endpoint: **https://vudh1.github.io/aoe1/** (lowercase).
+- Nested compatibility path: `https://vudh1.github.io/aoe1/aoe1/`.
+- Repository: `https://github.com/vudh1/aoe1`.
 
-GitHub Pages uses the repository name as the project path. To activate the requested canonical endpoint, rename this same repository to exactly `aoe1` in **Settings → General → Repository name → Rename**, then redeploy the Pages workflow. On an iPhone, open the repository Settings URL in Safari if the GitHub app does not show the setting. The relative asset paths already support the rename. Update local Git remotes after GitHub confirms the new name; existing browser saves stay on the same `vudh1.github.io` origin.
+The repository was renamed from `REA_AoE1` to exactly `aoe1`. GitHub Pages now reports the lowercase canonical URL, and Git remotes use the renamed repository. Relative asset paths support both artifact roots. Existing browser saves stay on the same `vudh1.github.io` origin. Redeploy the Pages workflow after a rename; the previous path can remain in browser or CDN caches briefly.
 
-The current root and nested site were tested in Chromium with normal TLS verification: finite wood gathering/deposit, construction/training/group movement, conquest, custom/tutorial, pause and save/reload all worked without missing assets or uncaught exceptions. The canonical `/aoe1/` path returned 404 before the rename. An integration attempt to rename the repository returned GitHub HTTP 403, `Resource not accessible by integration`; code access does not grant this repository-admin operation. See [live-site test notes](docs/LIVE-TEST.md) for the baseline and subsequent validation.
+The published pre-upgrade game was tested in Chromium with normal TLS verification: finite wood gathering/deposit, construction/training/group movement, conquest, custom/tutorial, pause and save/reload all worked without missing assets or uncaught exceptions. See [live-site test notes](docs/LIVE-TEST.md) for that baseline and subsequent canonical-site validation.
 
 ## Cost and limits
 
