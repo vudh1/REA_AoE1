@@ -17,7 +17,8 @@ export class Engine {
  state:GameState;
  metrics={simulationMs:0,pathQueue:0,aiMs:0};
  private ids=new Map<number,Entity>();
- private buckets=new Map<string,Entity[]>();
+ private buckets=new Map<number,Entity[]>();
+ private bucketWidth=1;
  private pathBudget=6;
  private fogDirty=true;
  private blocked=new Uint8Array(0);
@@ -29,12 +30,13 @@ export class Engine {
   const players:Player[]=[];
   const rgb=(color:string)=>{const hex=color.replace('#','');return [0,2,4].map(i=>parseInt(hex.slice(i,i+2),16));};
   const humanColor=rgb(settings.color);
-  const palette=['#d36c54','#d5af54','#9e82cc','#5cbdc6','#507cc9','#97ad4e'];
+  const palette=['#d36c54','#d5af54','#9e82cc','#5cbdc6','#507cc9','#97ad4e','#ee4035','#ffd633','#244a9c','#25252f','#fff2ba'];
   const colors=[settings.color,...palette.filter(color=>rgb(color).reduce((sum,c,i)=>sum+(c-humanColor[i]!)**2,0)>=100**2)];
   const civs=['river','highland','steppe'] as const;
-  for(let i=0;i<=settings.opponents;i++) {
+  for(let i=0;i<=settings.opponents+(settings.allies??0);i++) {
+   const allied=i>settings.opponents;
    const civ=i===0?settings.civ:settings.aiCiv==='random'?civs[i%3]!:settings.aiCiv;
-   players.push({id:i,name:i===0?'Your kingdom':`Kingdom ${i+1}`,civ,color:colors[i%colors.length]!,age:1,resources:settings.resources==='abundant'?stock({food:650,wood:650,gold:350,stone:350}):stock({food:260,wood:240,gold:100,stone:150}),techs:[],defeated:false,stats:freshStats(),explored:new Array(generated.map.size**2).fill(0),visible:new Array(generated.map.size**2).fill(0),memory:{},...(i?{ai:{nextDecision:0,phase:'opening',nextAttack:0,scoutIndex:0,lastBuild:0}}:{})});
+   players.push({id:i,team:allied?0:i,name:i===0?'Your kingdom':allied?`Allied kingdom ${i-settings.opponents}`:`Kingdom ${i+1}`,civ,color:colors[i%colors.length]!,age:1,resources:settings.resources==='abundant'?stock({food:650,wood:650,gold:350,stone:350}):stock({food:260,wood:240,gold:100,stone:150}),techs:[],defeated:false,stats:freshStats(),explored:new Array(generated.map.size**2).fill(0),visible:new Array(generated.map.size**2).fill(0),memory:{},...(i?{ai:{nextDecision:0,phase:'opening',nextAttack:0,scoutIndex:0,lastBuild:0}}:{})});
   }
   this.state={version:1,settings:{...settings},map:generated.map,tick:0,nextId:Math.max(0,...generated.resources.map(e=>e.id))+1,rng:2166136261,entities:generated.resources,players,projectiles:[],events:[],paused:false,result:'playing',tutorialStep:0};
   for(const p of players) {
@@ -46,10 +48,21 @@ export class Engine {
   this.reindex(); this.updateFog();
  }
  get(id:number) {return this.ids.get(id);}
+ areAllied(a:number,b:number):boolean {
+  const first=this.state.players[a],second=this.state.players[b];
+  return a>=0&&b>=0&&!!first&&!!second&&(first.team??first.id)===(second.team??second.id);
+ }
+ isHostile(a:number,b:number):boolean {
+  return a>=0&&b>=0&&!!this.state.players[a]&&!!this.state.players[b]&&!this.areAllied(a,b);
+ }
+ private alliedOwners(owner:number) {return this.state.players.filter(player=>this.areAllied(owner,player.id)).map(player=>player.id);}
  private reindex() {
-  this.ids.clear(); this.buckets.clear();
+  this.ids.clear();
+  for(const bucket of this.buckets.values())bucket.length=0;
   const size=this.state.map.size;
-  this.blocked=new Uint8Array(size*size);this.gates=new Int8Array(size*size);this.gates.fill(-1);
+  this.bucketWidth=Math.ceil(size/6);
+  if(this.blocked.length!==size*size){this.blocked=new Uint8Array(size*size);this.gates=new Int8Array(size*size);}else this.blocked.fill(0);
+  this.gates.fill(-1);
   for(let i=0;i<this.blocked.length;i++)if(this.state.map.tiles[i]===2)this.blocked[i]=1;
   for(const e of this.state.entities) {
    if(e.hp<=0) continue;
@@ -60,14 +73,14 @@ export class Engine {
      if(e.type==='gate')this.gates[y*size+x]=e.owner;else this.blocked[y*size+x]=1;
     }
    }
-   const k=`${Math.floor(e.x/6)},${Math.floor(e.y/6)}`;
+   const k=Math.floor(e.y/6)*this.bucketWidth+Math.floor(e.x/6);
    let b=this.buckets.get(k);if(!b)this.buckets.set(k,b=[]);b.push(e);
   }
  }
  entitiesNear(x:number,y:number,r:number):Entity[] {
   const found:Entity[]=[];
-  for(let cy=Math.floor((y-r)/6);cy<=Math.floor((y+r)/6);cy++)for(let cx=Math.floor((x-r)/6);cx<=Math.floor((x+r)/6);cx++) {
-   for(const e of this.buckets.get(`${cx},${cy}`)??[])if(e.hp>0&&Math.hypot(x-e.x,y-e.y)<=r+e.radius)found.push(e);
+  for(let cy=Math.max(0,Math.floor((y-r)/6));cy<=Math.min(this.bucketWidth-1,Math.floor((y+r)/6));cy++)for(let cx=Math.max(0,Math.floor((x-r)/6));cx<=Math.min(this.bucketWidth-1,Math.floor((x+r)/6));cx++) {
+   for(const e of this.buckets.get(cy*this.bucketWidth+cx)??[])if(e.hp>0&&(x-e.x)**2+(y-e.y)**2<=(r+e.radius)**2)found.push(e);
   }
   return found;
  }
@@ -85,7 +98,8 @@ export class Engine {
  private entity(owner:number,kind:Entity['kind'],type:Entity['type'],x:number,y:number,hp:number,radius:number,completed=true):Entity {
   const e:Entity={id:this.state.nextId++,owner,kind,type,x,y,prevX:x,prevY:y,hp,maxHp:hp,radius,completed,progress:completed?1:0,amount:0,carry:0,orders:[],path:[],cooldown:0,work:0,queue:[],task:'Idle',facing:0,stuck:0,repath:0,lastHit:-9999};
   this.state.entities.push(e);this.ids.set(e.id,e);
-  const key=`${Math.floor(x/6)},${Math.floor(y/6)}`;let bucket=this.buckets.get(key);if(!bucket)this.buckets.set(key,bucket=[]);bucket.push(e);
+  this.bucketWidth=Math.ceil(this.state.map.size/6);
+  const key=Math.floor(y/6)*this.bucketWidth+Math.floor(x/6);let bucket=this.buckets.get(key);if(!bucket)this.buckets.set(key,bucket=[]);bucket.push(e);
   return e;
  }
  createUnit(owner:number,type:UnitType,x:number,y:number):Entity {
@@ -159,13 +173,14 @@ export class Engine {
    this.reindex();return ok(e.id);
   }
   if(cmd.type==='order') {
+   if(!['move','attackMove','attack','gather','build','repair','deposit','hold','stop'].includes(cmd.order.type))return fail('Unknown unit order.');
    if(!finitePoint(cmd.order)||cmd.order.x<0||cmd.order.y<0||cmd.order.x>=this.state.map.size||cmd.order.y>=this.state.map.size)return fail('That location is outside the map.');
    const selected=[...new Set(cmd.ids)].map(id=>this.get(id)).filter((e):e is Entity=>!!e&&e.owner===owner&&e.kind==='unit'&&e.hp>0);
    if(!selected.length)return fail('Select your units first.');
    const target=cmd.order.target===undefined?undefined:this.get(cmd.order.target);
    if(['attack','gather','build','repair','deposit'].includes(cmd.order.type)&&!target)return fail('This target no longer exists.');
    if(target&&target.owner!==owner&&!this.isVisible(owner,target))return fail('This target is outside your sight.');
-   if(cmd.order.type==='attack'&&(target!.owner<0||target!.owner===owner||this.state.settings.peaceful))return fail('Choose a hostile unit or building.');
+   if(cmd.order.type==='attack'&&(target!.owner<0||!this.isHostile(owner,target!.owner)||this.state.settings.peaceful))return fail('Choose a hostile unit or building.');
    if(cmd.order.type==='gather'&&!(target!.kind==='resource'||target!.type==='farm'&&target!.owner===owner&&target!.completed))return fail('This is not a usable resource.');
    if(cmd.order.type==='build'&&!(target!.kind==='building'&&target!.owner===owner&&!target!.completed))return fail('Choose an unfinished friendly building.');
    if(cmd.order.type==='repair'&&!(target!.kind==='building'&&target!.owner===owner&&target!.completed&&target!.hp<target!.maxHp))return fail('Choose a damaged friendly building.');
@@ -219,7 +234,7 @@ export class Engine {
   }
   if(cmd.type==='gate') {
    const e=this.get(cmd.id);if(!e||e.owner!==owner||e.type!=='gate'||!e.completed)return fail('Select your completed gate.');
-   if(e.open&&this.state.entities.some(u=>u.hp>0&&u.kind==='unit'&&u.owner!==owner&&Math.abs(u.x-e.x)<e.radius+u.radius&&Math.abs(u.y-e.y)<e.radius+u.radius))return fail('A foreign unit is inside the gate. Wait until it has passed before closing.');
+   if(e.open&&this.state.entities.some(u=>u.hp>0&&u.kind==='unit'&&this.isHostile(owner,u.owner)&&Math.abs(u.x-e.x)<e.radius+u.radius&&Math.abs(u.y-e.y)<e.radius+u.radius))return fail('A foreign unit is inside the gate. Wait until it has passed before closing.');
    e.open=!e.open;for(const u of this.state.entities)if(u.kind==='unit')u.repath=0;return ok();
   }
   return fail('Unknown command.');
@@ -234,12 +249,11 @@ export class Engine {
   return t.kind==='building'?Math.hypot(Math.max(0,Math.abs(e.x-t.x)-t.radius),Math.max(0,Math.abs(e.y-t.y)-t.radius)):Math.max(0,distance(e,t)-t.radius);
  }
  private canStand(e:Entity,x:number,y:number) {
-  const r=e.radius*.75;
-  const s=this.state.map.size;
-  return [[x,y],[x-r,y-r],[x+r,y-r],[x-r,y+r],[x+r,y+r]].every(([cx,cy])=> {
-   const tx=Math.floor(cx!),ty=Math.floor(cy!),index=ty*s+tx;
-   return tx>=0&&ty>=0&&tx<s&&ty<s&&!this.blocked[index]&&(this.gates[index]<0||this.gates[index]===e.owner);
-  });
+  const r=e.radius*.75,s=this.state.map.size;
+  const left=Math.floor(x-r),right=Math.floor(x+r),top=Math.floor(y-r),bottom=Math.floor(y+r);
+  if(left<0||top<0||right>=s||bottom>=s)return false;
+  const free=(index:number)=>!this.blocked[index]&&(this.gates[index]<0||this.areAllied(this.gates[index]!,e.owner));
+  return free(Math.floor(y)*s+Math.floor(x))&&free(top*s+left)&&free(top*s+right)&&free(bottom*s+left)&&free(bottom*s+right);
  }
  private walk(e:Entity,target:Point,reach=.15):boolean {
   if(distance(e,target)<=reach){e.path=[];e.stuck=0;return true;}
@@ -248,7 +262,7 @@ export class Engine {
   if(!e.path.length||e.repath<=0) {
    if(this.pathBudget>0) {
     this.pathBudget--;
-    e.path=findPath(this.state.map,this.state.entities,e,target,e.owner,1800);
+    e.path=findPath(this.state.map,this.state.entities,e,target,e.owner,1800,this.alliedOwners(e.owner));
     // A* returns no nodes when already in an interaction tile. Finish crossing
     // that tile instead of losing the last fraction of a route on a refresh.
     if(!e.path.length) {
@@ -353,7 +367,7 @@ export class Engine {
   if(e.kind==='unit'){const def=this.unitStats(e);return {damage:def.damage,range:def.range,cooldown:def.cooldown,bonus:def.bonus,targets:def.targets};}
   const p=this.state.players[e.owner]!,upgrade=p.techs.includes('tower');return {damage:upgrade?11:8,range:upgrade?8:7,cooldown:1.4,bonus:undefined,targets:['unit','building'] as ('unit'|'building')[]};
  }
- private hostile(a:Entity,b:Entity) {return a.owner>=0&&b.owner>=0&&a.owner!==b.owner&&b.hp>0&&b.kind!=='resource';}
+ private hostile(a:Entity,b:Entity) {return this.isHostile(a.owner,b.owner)&&b.hp>0&&b.kind!=='resource';}
  private acquire(e:Entity,r:number):Entity|undefined {
   if(this.state.settings.peaceful)return;
   const stats=this.attackStats(e);
@@ -379,7 +393,7 @@ export class Engine {
   this.emit('attack',attacker.owner,'Attack',target.x,target.y,attacker.id);
  }
  private damage(target:Entity,amount:number,owner:number) {
-  if(target.hp<=0)return;
+  if(target.hp<=0||!this.isHostile(owner,target.owner))return;
   const alert=this.state.tick-target.lastHit>160;target.hp-=amount;target.lastHit=this.state.tick;
   if(alert)this.emit('attacked',target.owner,`${target.kind==='building'?BUILDINGS[target.type as BuildingType].name:UNITS[target.type as UnitType].name} under attack!`,target.x,target.y,target.id);
   if(target.hp<=0) {
@@ -394,7 +408,9 @@ export class Engine {
   const stats=this.attackStats(e);
   if(!stats.targets.includes(t.kind as 'unit'|'building')){if(!hold)this.finishOrder(e);return;}
   if(!e.home)e.home={x:e.x,y:e.y};
-  if(distance(e,e.home)>24){if(!hold)this.finishOrder(e);return;}
+  const automatic=e.orders[0]?.automatic===true;
+  const chaseLimit=automatic?Math.min(this.unitStats(e).sight,8):24;
+  if(distance(e,e.home)>chaseLimit||(automatic&&distance(t,e.home)>chaseLimit+stats.range)){if(!hold)this.finishOrder(e);return;}
   if(this.edgeDistance(e,t)<=stats.range+.15){e.path=[];this.hit(e,t);}
   else if(!hold){e.task='Chasing';this.approach(e,t,stats.range);}
  }
@@ -403,7 +419,11 @@ export class Engine {
   if(!order) {
    const r=e.type==='villager'?3:Math.min(this.unitStats(e).sight,8);
    const target=this.acquire(e,r);
-   if(target){e.home={x:e.x,y:e.y};e.orders.unshift({type:'attack',target:target.id,x:target.x,y:target.y});order=e.orders[0];}else {e.task='Idle';return;}
+   if(target){
+    e.home={x:e.x,y:e.y};
+    e.orders.unshift({type:'attack',target:target.id,x:target.x,y:target.y,automatic:true},{type:'move',x:e.x,y:e.y,automatic:true});
+    order=e.orders[0];
+   }else {e.task='Idle';return;}
   }
   const t=order.target===undefined?undefined:this.get(order.target);
   if(order.type==='move'||order.type==='attackMove') {
@@ -436,24 +456,49 @@ export class Engine {
    if(this.afford(e.owner,cost)){this.spend(e.owner,cost);t.hp+=gain;e.work+=DT;}else this.notice(e,'Insufficient resources for repairs.');
   }
  }
+ /** Snapshot every mutable nested field; unseen memory must never share live arrays. */
+ private remember(e:Entity):Entity {
+  return {...e,orders:e.orders.map(order=>({...order})),path:e.path.map(point=>({...point})),queue:e.queue.map(item=>({...item,cost:{...item.cost}})),...(e.rally?{rally:{...e.rally}}:{}),...(e.home?{home:{...e.home}}:{})};
+ }
+ private sameResourceSnapshot(e:Entity,previous:Entity) {
+  return e.id===previous.id&&e.owner===previous.owner&&e.kind===previous.kind&&e.type===previous.type&&e.x===previous.x&&e.y===previous.y&&e.prevX===previous.prevX&&e.prevY===previous.prevY&&e.hp===previous.hp&&e.maxHp===previous.maxHp&&e.radius===previous.radius&&e.completed===previous.completed&&e.progress===previous.progress&&e.amount===previous.amount&&e.resource===previous.resource&&e.carry===previous.carry&&e.carryType===previous.carryType&&e.cooldown===previous.cooldown&&e.work===previous.work&&e.task===previous.task&&e.facing===previous.facing&&e.stuck===previous.stuck&&e.repath===previous.repath&&e.lastHit===previous.lastHit&&e.open===previous.open&&!e.home&&!previous.home&&!e.rally&&!previous.rally&&!e.orders.length&&!previous.orders.length&&!e.path.length&&!previous.path.length&&!e.queue.length&&!previous.queue.length;
+ }
  private updateFog() {
   const {map,players}=this.state,s=map.size;
+  const teamVisibility=new Map<number,number[]>();
   for(const p of players) {
-   p.visible.fill(0);
-   for(const e of this.state.entities)if(e.owner===p.id&&e.hp>0) {
+   const team=p.team??p.id,shared=teamVisibility.get(team);
+   if(shared) {
+    for(let i=0;i<shared.length;i++){p.visible[i]=shared[i]!;if(shared[i])p.explored[i]=1;}
+   }else {
+    p.visible.fill(0);
+    for(const e of this.state.entities)if(this.areAllied(e.owner,p.id)&&e.hp>0) {
     if(e.kind==='building'&&!e.completed)continue;
-    const r=e.kind==='unit'?this.unitStats(e).sight:BUILDINGS[e.type as BuildingType].sight;
-    for(let y=Math.max(0,Math.floor(e.y-r));y<=Math.min(s-1,Math.ceil(e.y+r));y++)for(let x=Math.max(0,Math.floor(e.x-r));x<=Math.min(s-1,Math.ceil(e.x+r));x++)if(Math.hypot(x+.5-e.x,y+.5-e.y)<=r){p.visible[y*s+x]=1;p.explored[y*s+x]=1;}
+    const r=e.kind==='unit'?UNITS[e.type as UnitType].sight+(this.state.players[e.owner]!.civ==='steppe'&&e.type==='scout'?2:0):BUILDINGS[e.type as BuildingType].sight;
+    const radiusSquared=r*r,minX=Math.max(0,Math.floor(e.x-r)),maxX=Math.min(s-1,Math.ceil(e.x+r));
+    const minY=Math.max(0,Math.floor(e.y-r)),maxY=Math.min(s-1,Math.ceil(e.y+r));
+    for(let y=minY;y<=maxY;y++) {
+     const dy=y+.5-e.y,row=y*s;
+     for(let x=minX;x<=maxX;x++)if((x+.5-e.x)**2+dy*dy<=radiusSquared){p.visible[row+x]=1;p.explored[row+x]=1;}
+    }
+   }
+    teamVisibility.set(team,p.visible);
    }
    for(const [id,memory] of Object.entries(p.memory)) {
-    if(p.visible[Math.floor(memory.y)*s+Math.floor(memory.x)]&&!this.get(Number(id)))delete p.memory[id];
+    if((this.areAllied(memory.owner,p.id)||p.visible[Math.floor(memory.y)*s+Math.floor(memory.x)])&&!this.get(Number(id)))delete p.memory[id];
    }
-   for(const e of this.state.entities)if(e.owner!==p.id&&e.kind!=='unit'&&this.isVisible(p.id,e))p.memory[e.id]=structuredClone(e);
+   for(const e of this.state.entities)if(e.owner!==p.id&&e.kind!=='unit'&&this.isVisible(p.id,e)) {
+    const previous=p.memory[e.id];
+    // Neutral scenery usually has no changes between fog updates. Retain its
+    // independent snapshot rather than allocating hundreds of identical copies.
+    if(e.kind==='resource'&&previous&&this.sameResourceSnapshot(e,previous))continue;
+    p.memory[e.id]=this.remember(e);
+   }
   }
   this.fogDirty=false;
  }
  isVisible(owner:number,e:Entity) {
-  if(e.owner===owner)return true;
+  if(this.areAllied(e.owner,owner))return true;
   const p=this.state.players[owner],s=this.state.map.size;
   if(!p||e.x<0||e.y<0||e.x>=s||e.y>=s)return false;
   return p.visible[Math.floor(e.y)*s+Math.floor(e.x)]===1;
@@ -468,7 +513,7 @@ export class Engine {
    p.defeated=true;this.emit('defeated',p.id,`${p.name} has fallen.`);
   }
   if(this.state.players[0]!.defeated){this.state.result='defeat';this.emit('defeat',0,'Your kingdom has fallen.');}
-  else if(!this.state.settings.peaceful&&this.state.players.length>1&&this.state.players.slice(1).every(p=>p.defeated)){this.state.result='victory';this.emit('victory',0,'All rival kingdoms have fallen.');}
+  else if(!this.state.settings.peaceful&&this.state.players.some(p=>this.isHostile(0,p.id))&&this.state.players.filter(p=>this.isHostile(0,p.id)).every(p=>p.defeated)){this.state.result='victory';this.emit('victory',0,'All rival kingdoms have fallen.');}
  }
  step(ticks=1) {
   if(!Number.isFinite(ticks)||ticks<0)return;

@@ -59,7 +59,7 @@ function settings(value: unknown): MatchSettings {
   const v = object(value, 'settings');
   return {
     seed: text(v.seed, 'settings.seed', 256), size: choice(v.size, ['small','medium','large'], 'settings.size'),
-    opponents: number(v.opponents, 'settings.opponents', 0, 7, true), difficulty: choice(v.difficulty, ['easy','normal','hard'], 'settings.difficulty'),
+    opponents: number(v.opponents, 'settings.opponents', 0, 3, true), ...(v.allies !== undefined ? {allies: number(v.allies, 'settings.allies', 0, 1, true)} : {}), difficulty: choice(v.difficulty, ['easy','normal','hard'], 'settings.difficulty'),
     resources: choice(v.resources, ['standard','abundant'], 'settings.resources'), population: choice(v.population, [50,100,150], 'settings.population'),
     civ: choice(v.civ, CIVS, 'settings.civ'), aiCiv: choice(v.aiCiv, [...CIVS,'random'], 'settings.aiCiv'), color: color(v.color, 'settings.color'),
     speed: number(v.speed, 'settings.speed', 0.25, 8), peaceful: bool(v.peaceful, 'settings.peaceful'), tutorial: bool(v.tutorial, 'settings.tutorial'), cleanup: bool(v.cleanup, 'settings.cleanup'),
@@ -76,6 +76,7 @@ function order(value: unknown, path: string, size: number): Order {
   const result: Order = {...point(v, path, size), type: choice(v.type, ['move','attackMove','attack','gather','build','repair','deposit','hold','stop'], `${path}.type`)};
   if (v.target !== undefined) result.target = id(v.target, `${path}.target`);
   if (v.resource !== undefined) result.resource = choice(v.resource, RESOURCES, `${path}.resource`);
+  if (v.automatic !== undefined) result.automatic = bool(v.automatic, `${path}.automatic`);
   return result;
 }
 function queueItem(value: unknown, path: string): QueueItem {
@@ -154,6 +155,7 @@ function player(value: unknown, index: number, size: number, playerCount: number
     explored: array(v.explored, `${path}.explored`, size * size, size * size).map((v, i) => number(v, `${path}.explored[${i}]`, 0, 1, true)),
     visible: array(v.visible, `${path}.visible`, size * size, size * size).map((v, i) => number(v, `${path}.visible[${i}]`, 0, 1, true)), memory,
   };
+  if (v.team !== undefined) result.team = number(v.team, `${path}.team`, 0, playerCount - 1, true);
   if (v.ai !== undefined) result.ai = ai(v.ai, `${path}.ai`, size);
   return result;
 }
@@ -184,7 +186,7 @@ export function validateState(input: unknown): GameState {
   if (v.version !== 1) fail('version', 'is unsupported (expected version 1)');
   const config = settings(v.settings), map = worldMap(v.map), tick = number(v.tick, 'tick', 0, 1e12, true);
   const playerInput = array(v.players, 'players', 8, 1), count = playerInput.length;
-  if (count !== config.opponents + 1 || map.starts.length !== count) fail('players', 'must match the configured opponents and map starts');
+  if (count !== config.opponents + (config.allies ?? 0) + 1 || map.starts.length !== count) fail('players', 'must match the configured opponents and map starts');
   const entities = array(v.entities, 'entities', MAX_ENTITIES).map((e, i) => entity(e, `entities[${i}]`, map.size, count));
   const projectiles = array(v.projectiles, 'projectiles', MAX_ENTITIES).map((p, i) => projectile(p, `projectiles[${i}]`, map.size, count));
   const nextId = id(v.nextId, 'nextId'), seen = new Set<number>();

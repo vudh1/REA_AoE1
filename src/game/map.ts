@@ -32,14 +32,18 @@ function distance(a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y
 /** Tile centers are x+.5/y+.5. Start positions are Town Center centers, not footprint origins. */
 export function generateMap(settings: MatchSettings): {map: WorldMap; resources: Entity[]} {
   const size = {small: 96, medium: 128, large: 160}[settings.size];
-  const random = randomFor(`${GENERATION}:${settings.seed}:${settings.size}:${settings.opponents}`);
-  const count = Math.max(2, Math.min(4, settings.opponents + 1));
+  const allies = settings.allies ?? 0;
+  if (!Number.isInteger(settings.opponents) || settings.opponents < 0 || settings.opponents > 3 || !Number.isInteger(allies) || allies < 0 || allies > 1) throw new Error('Choose zero to three opponents and zero or one ally.');
+  const random = randomFor(`${GENERATION}:${settings.seed}:${settings.size}:${settings.opponents}${allies ? `:allies${allies}` : ''}`);
+  const count = settings.opponents + allies + 1;
   const margin = Math.floor(size * 0.24) + 0.5;
   const far = size - margin;
   const corners = [{x: margin, y: margin}, {x: far, y: far}, {x: far, y: margin}, {x: margin, y: far}];
-  const starts = count === 3
-    ? [corners[0]!, {x: far, y: Math.floor(size / 2) + 0.5}, corners[3]!]
-    : corners.slice(0, count);
+  const starts = count === 5
+    ? [225, 81, 297, 9, 153].map(degrees => ({x: Math.floor(size / 2 + Math.cos(degrees * Math.PI / 180) * size * 0.32) + 0.5, y: Math.floor(size / 2 + Math.sin(degrees * Math.PI / 180) * size * 0.32) + 0.5}))
+    : count === 3
+      ? [corners[0]!, {x: far, y: Math.floor(size / 2) + 0.5}, corners[3]!]
+      : corners.slice(0, count);
   const tiles: Terrain[] = Array.from({length: size * size}, () => random() < 0.1 ? 1 : 0);
   const map: WorldMap = {size, tiles, starts, generation: GENERATION, seed: settings.seed};
 

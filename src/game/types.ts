@@ -6,7 +6,7 @@ export type TechId = 'gather'|'carry'|'infantry'|'ranged'|'armor'|'health'|'dura
 export type Civilization = 'river'|'highland'|'steppe';
 export type Terrain = 0|1|2|3;
 export interface Point {x:number;y:number}
-export interface Order extends Point { type:'move'|'attackMove'|'attack'|'gather'|'build'|'repair'|'deposit'|'hold'|'stop'; target?:number;resource?:Resource; }
+export interface Order extends Point { type:'move'|'attackMove'|'attack'|'gather'|'build'|'repair'|'deposit'|'hold'|'stop'; target?:number;resource?:Resource;automatic?:boolean; }
 export interface QueueItem {kind:'unit'|'tech';type:UnitType|TechId;progress:number;time:number;cost:Stock;population:number}
 export interface Entity extends Point {
  id:number; owner:number; kind:'unit'|'building'|'resource'; type:UnitType|BuildingType|'tree'|'berries'|'gold'|'stone'|'deer';
@@ -17,8 +17,8 @@ export interface Entity extends Point {
 }
 export interface Stats {gathered:number;trained:number;lost:number;kills:number;built:number;destroyed:number}
 export interface AIState {nextDecision:number;phase:string;nextAttack:number;scoutIndex:number;lastBuild:number;target?:Point;issuedCommands?:number;failedCommands?:number;lastFailure?:string;lastExplore?:number;attacks?:number}
-export interface Player {id:number;name:string;civ:Civilization;color:string;age:number;resources:Stock;techs:TechId[];defeated:boolean;stats:Stats;ai?:AIState;explored:number[];visible:number[];memory:Record<string,Entity>}
-export interface MatchSettings {seed:string;size:'small'|'medium'|'large';opponents:number;difficulty:'easy'|'normal'|'hard';resources:'standard'|'abundant';population:50|100|150;civ:Civilization;aiCiv:Civilization|'random';color:string;speed:number;peaceful:boolean;tutorial:boolean;cleanup:boolean}
+export interface Player {id:number;team?:number;name:string;civ:Civilization;color:string;age:number;resources:Stock;techs:TechId[];defeated:boolean;stats:Stats;ai?:AIState;explored:number[];visible:number[];memory:Record<string,Entity>}
+export interface MatchSettings {seed:string;size:'small'|'medium'|'large';opponents:number;allies?:number;difficulty:'easy'|'normal'|'hard';resources:'standard'|'abundant';population:50|100|150;civ:Civilization;aiCiv:Civilization|'random';color:string;speed:number;peaceful:boolean;tutorial:boolean;cleanup:boolean}
 export interface WorldMap {size:number;tiles:Terrain[];starts:Point[];generation:number;seed:string}
 export interface GameEvent {tick:number;type:string;owner:number;text:string;x?:number;y?:number;entity?:number}
 export interface Projectile {id:number;owner:number;target:number;x:number;y:number;tx:number;ty:number;damage:number;life:number;total:number;style:string}
@@ -36,4 +36,4 @@ export type Command =
  | {type:'gate';id:number}
  | {type:'resign'};
 export interface Result {ok:boolean;reason?:string;id?:number}
-export const DEFAULT_SETTINGS:MatchSettings={seed:'AURELIA',size:'medium',opponents:1,difficulty:'normal',resources:'standard',population:100,civ:'river',aiCiv:'random',color:'#5cbdc6',speed:1,peaceful:false,tutorial:false,cleanup:false};
+export const DEFAULT_SETTINGS:MatchSettings={seed:'AURELIA',size:'medium',opponents:1,allies:0,difficulty:'normal',resources:'standard',population:100,civ:'river',aiCiv:'random',color:'#5cbdc6',speed:1,peaceful:false,tutorial:false,cleanup:false};

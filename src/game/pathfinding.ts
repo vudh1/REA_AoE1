@@ -1,11 +1,11 @@
 import {BUILDINGS} from './data';
 import type {BuildingType, Entity, Point, WorldMap} from './types';
 
-function blocks(entity: Entity, owner: number): boolean {
+function blocks(entity: Entity, owner: number, alliedOwners: readonly number[] = []): boolean {
   if (entity.hp <= 0) return false;
   if (entity.kind === 'resource') return entity.amount > 0;
   if (entity.kind !== 'building') return false;
-  return entity.type !== 'gate' || (!entity.open && entity.owner !== owner);
+  return entity.type !== 'gate' || (!entity.open && entity.owner !== owner && !alliedOwners.includes(entity.owner));
 }
 
 function contains(entity: Entity, x: number, y: number): boolean {
@@ -15,18 +15,18 @@ function contains(entity: Entity, x: number, y: number): boolean {
 }
 
 /** Moving units use local avoidance and do not invalidate the static navigation grid. */
-export function isWalkable(map: WorldMap, entities: Entity[], x: number, y: number, owner: number): boolean {
+export function isWalkable(map: WorldMap, entities: Entity[], x: number, y: number, owner: number, alliedOwners: readonly number[] = []): boolean {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   x = Math.floor(x); y = Math.floor(y);
   if (x < 0 || y < 0 || x >= map.size || y >= map.size || map.tiles[y * map.size + x] === 2) return false;
-  return !entities.some(entity => blocks(entity, owner) && contains(entity, x, y));
+  return !entities.some(entity => blocks(entity, owner, alliedOwners) && contains(entity, x, y));
 }
 
-function occupancy(map: WorldMap, entities: Entity[], owner: number): Uint8Array {
+function occupancy(map: WorldMap, entities: Entity[], owner: number, alliedOwners: readonly number[]): Uint8Array {
   const blocked = new Uint8Array(map.size * map.size);
   for (let i = 0; i < blocked.length; i++) if (map.tiles[i] === 2) blocked[i] = 1;
   for (const entity of entities) {
-    if (!blocks(entity, owner)) continue;
+    if (!blocks(entity, owner, alliedOwners)) continue;
     if (entity.kind === 'resource') {
       const x = Math.floor(entity.x), y = Math.floor(entity.y);
       if (x >= 0 && y >= 0 && x < map.size && y < map.size) blocked[y * map.size + x] = 1;
@@ -77,7 +77,7 @@ class MinHeap {
 const DIRECTIONS = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const;
 
 /** Bounded A*. A blocked destination becomes its nearest reachable interaction tile. */
-export function findPath(map: WorldMap, entities: Entity[], start: Point, goal: Point, owner: number, maxNodes = 2500): Point[] {
+export function findPath(map: WorldMap, entities: Entity[], start: Point, goal: Point, owner: number, maxNodes = 2500, alliedOwners: readonly number[] = []): Point[] {
   if (![start.x, start.y, goal.x, goal.y].every(Number.isFinite) || maxNodes < 1) return [];
   const size = map.size, length = size * size;
   const sx = Math.floor(start.x), sy = Math.floor(start.y);
@@ -85,7 +85,7 @@ export function findPath(map: WorldMap, entities: Entity[], start: Point, goal: 
   const gx = Math.max(0, Math.min(size - 1, Math.floor(goal.x))), gy = Math.max(0, Math.min(size - 1, Math.floor(goal.y)));
   const from = sy * size + sx, to = gy * size + gx;
   if (from === to) return [];
-  const blocked = occupancy(map, entities, owner);
+  const blocked = occupancy(map, entities, owner, alliedOwners);
   blocked[from] = 0; // Permit recovery from a newly placed obstacle under the unit.
   const interaction = blocked[to] === 1;
   const goals = new Uint8Array(length);
@@ -97,7 +97,7 @@ export function findPath(map: WorldMap, entities: Entity[], start: Point, goal: 
   };
   if (!interaction) addGoal(gx, gy);
   else {
-    const obstacle = entities.find(entity => blocks(entity, owner) && contains(entity, gx, gy));
+    const obstacle = entities.find(entity => blocks(entity, owner, alliedOwners) && contains(entity, gx, gy));
     if (obstacle) {
       const radius = obstacle.kind === 'building' ? BUILDINGS[obstacle.type as BuildingType].size / 2 : 0.5;
       const minX = Math.ceil(obstacle.x - radius - 0.5), maxX = Math.ceil(obstacle.x + radius - 0.5) - 1;
