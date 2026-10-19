@@ -9,6 +9,9 @@ node scripts/live-smoke.mjs
 
 The default target is `https://vudh1.github.io/aoe1/`.
 
+Published build `b44c9c3` passed all 11 smoke checks at that address with
+`LIVE_REQUIRE_TOUCH=1`, Chromium 154, and normal HTTPS certificate verification.
+
 Set `LIVE_URL` to test another deployed address or a local Pages package. The
 target must end in the deployment directory, for example
 `LIVE_URL=http://127.0.0.1:4173/`. The script checks that directory and its nested
@@ -87,3 +90,32 @@ Playwright preserves the managed environment's existing proxy bypasses and adds
 that bypass, a proxy-generated response could be mistaken for an already
 running local server. A fresh-server startup check passed with the normal
 `npm run test:browser` command after this configuration fix.
+
+## Canonical deployment result
+
+The deployed game loaded `index-Cd3PxM_v.js`, `index-BQCUhrrg.css`, and the
+1254 × 1254 illustrated atlas with HTTP 200 at both the canonical address and
+its nested `aoe1/` entry. All 11 live checks passed with zero uncaught browser
+exceptions and zero failed game assets.
+
+The untouched enemy and allied settlements moved their original workers and
+physically deposited 270 and 280 resources, respectively, during the autonomy
+check. A real player timber order increased the wood stockpile from 240 to 290.
+Construction, training, group movement, combat, allied-unit protection, custom
+settings, tutorial, pause, and save restoration also passed. All 37 inventory
+cards displayed a decoded atlas; the available Villager and age-locked Heavy
+Infantry showed the expected availability.
+
+At 390 × 844, native touch selected a villager, issued a movement command, and
+reached the touched destination. The command panel measured 264 px wide and the
+44 × 44 pause button remained inside the viewport. A separate fresh-page check
+confirmed the brand stayed within the header (y = 11.5–39.5 inside y = 0–99),
+above the match ribbon (y = 106–136).
+
+The local artifacts are `.local/live/dawn-live-report.json`,
+`.local/live/dawn-live-game.png`, `.local/live/dawn-live-inventory.png`,
+`.local/live/dawn-live-mobile-game.png`, and
+`.local/live/live-phone-header.png`. These generated files are ignored by Git.
+The report includes successful asset URLs so a future verification can identify
+which deployed bundle it actually exercised. This result covers Chromium with
+touch emulation; it does not claim testing on physical iPhone Safari.

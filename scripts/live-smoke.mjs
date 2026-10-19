@@ -14,7 +14,7 @@ const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (!process.env.PLAYWRIGHT_USE_BUNDLED_CHROMIUM && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 const proxyURL = !['localhost', '127.0.0.1', '[::1]'].includes(target.hostname) && (process.env.HTTPS_PROXY || process.env.HTTP_PROXY);
 const browser = await chromium.launch({executablePath, headless: true, ...(proxyURL ? {proxy: {server: proxyURL}} : {})});
-const report = {target: target.href, testedAt: new Date().toISOString(), browser: browser.version(), checks: [], errors: [], failedAssets: [], mobile: null};
+const report = {target: target.href, testedAt: new Date().toISOString(), browser: browser.version(), checks: [], errors: [], assets: [], failedAssets: [], mobile: null};
 const contexts = [];
 
 async function context(options = {}) {
@@ -24,6 +24,7 @@ async function context(options = {}) {
     page.on('pageerror', error => report.errors.push(error.message));
     page.on('response', response => {
       if (response.status() >= 400 && !response.url().endsWith('/favicon.ico')) report.failedAssets.push({status: response.status(), url: response.url()});
+      if (response.ok() && /\.(?:js|css|png)(?:\?|$)/.test(response.url()) && !report.assets.some(asset => asset.url === response.url())) report.assets.push({status: response.status(), url: response.url()});
     });
   });
   return result;
