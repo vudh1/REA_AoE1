@@ -6,6 +6,7 @@ interface DawnDebug {
     state: GameState; step(ticks?: number): void;
     command(owner: number, command: Command): {ok: boolean; reason?: string};
     canPlace(owner: number, type: BuildingType, x: number, y: number): {ok: boolean; reason?: string};
+    canStand(entity: Entity, x: number, y: number): boolean;
     createUnit(owner: number, type: UnitType, x: number, y: number): Entity;
     get(id: number): Entity | undefined;
   };
@@ -63,6 +64,7 @@ test('custom match settings and tutorial launch through the real menus', async (
   await page.getByRole('button', {name: 'CUSTOM GAME'}).click();
   await page.getByLabel('Map seed', {exact: true}).fill('BROWSER-CUSTOM');
   await page.getByRole('combobox', {name: 'Opponents', exact: true}).selectOption('3');
+  await page.getByRole('combobox', {name: 'Allies', exact: true}).selectOption('0');
   await page.getByRole('combobox', {name: 'Map size', exact: true}).selectOption('small');
   await page.getByRole('combobox', {name: 'Game speed', exact: true}).selectOption('2');
   await page.getByTestId('custom-start').click();
@@ -172,4 +174,107 @@ test('pause freezes simulation; local save survives reload; restart creates a fr
   await page.waitForTimeout(500);
   const delta = await page.evaluate(() => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state.tick)-before;
   expect(delta).toBeGreaterThan(1); expect(delta).toBeLessThan(20);
+});
+
+test('quick skirmish creates allied and enemy villages whose workers walk, gather and deposit unaided', async ({ page }) => {
+  await start(page);
+  const initial = await page.evaluate(() => {
+    const s = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state;
+    return {
+      teams: s.players.map(p => ({id: p.id, team: p.team ?? p.id, hasAI: !!p.ai})),
+      towns: s.entities.filter(e => e.type === 'towncenter').map(e => e.owner),
+      workers: s.entities.filter(e => e.owner > 0 && e.type === 'villager').map(e => ({id: e.id, owner: e.owner, x: e.x, y: e.y})),
+      sources: s.entities.filter(e => e.kind === 'resource').map(e => ({id: e.id, amount: e.amount})),
+      gathered: s.players.map(p => p.stats.gathered),
+    };
+  });
+  expect(initial.teams).toHaveLength(3);
+  const ally = initial.teams.find(p => p.id > 0 && p.team === initial.teams[0]!.team)!;
+  const enemy = initial.teams.find(p => p.team !== initial.teams[0]!.team)!;
+  expect(ally, 'A quick skirmish includes an allied kingdom').toBeDefined();
+  expect(enemy, 'A quick skirmish includes a hostile kingdom').toBeDefined();
+  expect(ally.hasAI && enemy.hasAI).toBe(true);
+  expect(initial.towns.sort()).toEqual([0, ally.id, enemy.id].sort());
+  const moved = new Set<number>();
+  for (let sample = 0; sample < 8; sample++) {
+    await tick(page, 200);
+    const positions = await page.evaluate(ids => {
+      const e = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine;
+      return ids.map(id => {const worker = e.get(id); return worker ? {id, x: worker.x, y: worker.y} : undefined;});
+    }, initial.workers.map(worker => worker.id));
+    for (const worker of initial.workers) {
+      const current = positions.find(p => p?.id === worker.id);
+      if (current && Math.hypot(current.x - worker.x, current.y - worker.y) > .75) moved.add(worker.owner);
+    }
+  }
+  const final = await page.evaluate(sources => {
+    const e = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine;
+    return {gathered: e.state.players.map(p => p.stats.gathered), depleted: sources.some(source => (e.get(source.id)?.amount ?? 0) < source.amount)};
+  }, initial.sources);
+  expect([...moved]).toEqual(expect.arrayContaining([ally.id, enemy.id]));
+  for (const id of [ally.id, enemy.id]) expect(final.gathered[id], `Kingdom ${id} physically deposits resources`).toBeGreaterThan(initial.gathered[id]!);
+  expect(final.depleted, 'Autonomous economies consume finite resource entities').toBe(true);
+});
+
+test('right click on an allied unit never attacks or damages it', async ({ page }) => {
+  await start(page);
+  const fixture = await page.evaluate(() => {
+    const d = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__, s = d.engine.state;
+    const ally = s.players.find(p => p.id > 0 && p.team === s.players[0]!.team)!;
+    if (!ally) throw new Error('Quick skirmish must include an ally');
+    const tc = s.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const attacker = d.engine.createUnit(0, 'infantry', tc.x - 5, tc.y - 4);
+    const target = d.engine.createUnit(ally.id, 'villager', tc.x - 5, tc.y - 1);
+    target.orders = [{type: 'hold', x: target.x, y: target.y}];
+    if (ally.ai) ally.ai.nextDecision = 1e9;
+    d.engine.step(1);
+    return {attacker: attacker.id, target: target.id, hp: target.hp};
+  });
+  await clickEntity(page, fixture.attacker, {center: true});
+  await clickEntity(page, fixture.target, {button: 'right'});
+  expect(await page.evaluate(id => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.get(id)?.orders.some(order => order.type === 'attack'), fixture.attacker)).toBe(false);
+  await tick(page, 200);
+  expect(await page.evaluate(id => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.get(id)?.hp, fixture.target)).toBe(fixture.hp);
+});
+
+test.describe('phone controls', () => {
+  test.use({viewport: {width: 390, height: 844}, deviceScaleFactor: 2, hasTouch: true, isMobile: true});
+
+  test('native touch can select and command a villager with the HUD inside the screen', async ({ page }) => {
+    await page.goto('/aoe1/'); await page.getByTestId('quick-start').tap();
+    await page.waitForFunction(() => !!(window as unknown as {__DAWN__?: DawnDebug}).__DAWN__?.engine);
+    const setup = await page.evaluate(() => {
+      const d = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__;
+      const worker = d.engine.state.entities.find(e => e.owner === 0 && e.type === 'villager')!;
+      d.renderer.center(worker.x, worker.y);
+      for (let r = 3; r <= 5; r++) for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+        if (Math.hypot(x, y) < 3 || Math.hypot(x, y) > 5) continue;
+        const destination = {x: Math.floor(worker.x + x) + .5, y: Math.floor(worker.y + y) + .5};
+        const screen = d.renderer.worldToScreen(destination.x, destination.y);
+        if (!d.engine.canStand(worker, destination.x, destination.y) || screen.x < 35 || screen.x > innerWidth - 35 || screen.y < 180 || screen.y > innerHeight - 280) continue;
+        return {id: worker.id, from: d.renderer.worldToScreen(worker.x, worker.y), to: screen, destination};
+      }
+      throw new Error('No visible, clear phone movement target');
+    });
+    await page.touchscreen.tap(setup.from.x, setup.from.y - 6);
+    await expect(page.getByTestId('build-house')).toBeVisible();
+    await page.getByTestId('touch-order').tap();
+    await page.touchscreen.tap(setup.to.x, setup.to.y);
+    await expect.poll(() => page.evaluate(id => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.get(id)?.orders.some(order => order.type === 'move'), setup.id)).toBe(true);
+    await tick(page, 250);
+    const distance = await page.evaluate(({id, destination}) => {
+      const e = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.get(id)!;
+      return Math.hypot(e.x - destination.x, e.y - destination.y);
+    }, {id: setup.id, destination: setup.destination});
+    expect(distance).toBeLessThan(1.5);
+    const bounds = await page.evaluate(() => {
+      const pause = document.querySelector('[data-testid="pause"]')!.getBoundingClientRect();
+      const commands = document.querySelector('#commands')!.getBoundingClientRect();
+      return {pauseFits: pause.left >= 0 && pause.right <= innerWidth && pause.top >= 0 && pause.bottom <= innerHeight, commandsWidth: commands.width};
+    });
+    expect(bounds.pauseFits, 'Pause remains accessible in portrait orientation').toBe(true);
+    expect(bounds.commandsWidth, 'Construction and military commands retain usable space').toBeGreaterThanOrEqual(100);
+    await page.getByTestId('pause').tap();
+    await expect(page.getByTestId('resume')).toBeVisible();
+  });
 });

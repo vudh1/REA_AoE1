@@ -7,6 +7,8 @@ npm ci
 node scripts/live-smoke.mjs
 ```
 
+The default target is `https://vudh1.github.io/aoe1/`.
+
 Set `LIVE_URL` to test another deployed address or a local Pages package. The
 target must end in the deployment directory, for example
 `LIVE_URL=http://127.0.0.1:4173/`. The script checks that directory and its nested
@@ -32,6 +34,9 @@ files are `dawn-live-menu.png`, `dawn-live-game.png`,
 
 - Both published entry paths start the actual packaged game.
 - Real menus launch a configured match and the tutorial.
+- A quick skirmish creates an allied settlement and an enemy settlement. Their
+  original workers move, collect finite resources, and deposit them without any
+  player orders. Contextual commands cannot attack or damage allied workers.
 - Mouse selection and contextual orders gather finite timber and physically
   deposit it. Construction, unit production, Shift selection, movement, and
   combat affect the simulation.
@@ -52,7 +57,11 @@ physical iPhone hardware.
 The original deployment at `https://vudh1.github.io/REA_AoE1/` and its nested
 `aoe1/` path returned HTTP 200 and started successfully in Chromium 154, with
 HTTPS verification enabled. At a desktop viewport of 1440 × 900, startup and
-menu interaction produced no uncaught browser exceptions.
+menu interaction produced no uncaught browser exceptions. The initial smoke
+suite also passed real-pointer timber gathering and drop-off (wood increased
+from 240 to 300), construction, unit training, group movement, conquest, custom
+settings, tutorial, pause, and local-save reload. No requested game asset failed
+to load. The report's mobile entry was a survey, not a claim of phone playability.
 
 At 390 × 844, the original HUD had a serious layout defect: the pause button
 ended at x = 502.7, outside the viewport, while the command column collapsed to

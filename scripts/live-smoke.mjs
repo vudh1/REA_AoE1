@@ -6,7 +6,7 @@ import {chromium} from '@playwright/test';
 
 // The remote target is intentional. Override LIVE_URL to exercise a local Pages
 // package with exactly the same real-pointer checks. HTTPS verification stays on.
-const target = new URL(process.env.LIVE_URL ?? 'https://vudh1.github.io/REA_AoE1/');
+const target = new URL(process.env.LIVE_URL ?? 'https://vudh1.github.io/aoe1/');
 const prefix = target.pathname.replace(/\/?$/, '/');
 const output = resolve(process.env.LIVE_OUTPUT ?? '/tmp');
 await mkdir(output, {recursive: true});
@@ -81,6 +81,7 @@ try {
     await page.getByRole('button', {name: 'CUSTOM GAME'}).click();
     await page.getByLabel('Map seed', {exact: true}).fill('LIVE-SMOKE-CUSTOM');
     await page.getByRole('combobox', {name: 'Opponents', exact: true}).selectOption('3');
+    await page.getByRole('combobox', {name: 'Allies', exact: true}).selectOption('0');
     await page.getByRole('combobox', {name: 'Map size', exact: true}).selectOption('small');
     await page.getByRole('combobox', {name: 'Game speed', exact: true}).selectOption('2');
     await page.getByTestId('custom-start').click();
@@ -91,6 +92,33 @@ try {
     await page.goto(target.href);
     await page.getByTestId('tutorial-start').click();
     assert.equal(await page.evaluate(() => window.__DAWN__.engine.state.settings.tutorial), true);
+  });
+  await check('allied and hostile villages autonomously walk, gather and deposit', async () => {
+    await start(page);
+    const initial = await page.evaluate(() => {
+      const s = window.__DAWN__.engine.state;
+      return {teams: s.players.map(p => ({id: p.id, team: p.team ?? p.id})), towns: s.entities.filter(e => e.type === 'towncenter').map(e => e.owner), workers: s.entities.filter(e => e.owner > 0 && e.type === 'villager').map(e => ({id: e.id, owner: e.owner, x: e.x, y: e.y})), gathered: s.players.map(p => p.stats.gathered)};
+    });
+    assert.equal(initial.teams.length, 3, 'Quick skirmish must create player, enemy and ally');
+    const ally = initial.teams.find(p => p.id > 0 && p.team === initial.teams[0].team);
+    const enemy = initial.teams.find(p => p.team !== initial.teams[0].team);
+    assert.ok(ally && enemy);
+    assert.deepEqual(initial.towns.sort(), [0, ally.id, enemy.id].sort());
+    const moved = new Set();
+    for (let sample = 0; sample < 8; sample++) {
+      await tick(page, 200);
+      const positions = await page.evaluate(ids => ids.map(id => {const e = window.__DAWN__.engine.get(id); return e && {id, x: e.x, y: e.y};}), initial.workers.map(worker => worker.id));
+      for (const worker of initial.workers) {
+        const current = positions.find(p => p?.id === worker.id);
+        if (current && Math.hypot(current.x - worker.x, current.y - worker.y) > .75) moved.add(worker.owner);
+      }
+    }
+    const gathered = await page.evaluate(() => window.__DAWN__.engine.state.players.map(p => p.stats.gathered));
+    for (const id of [ally.id, enemy.id]) {
+      assert.ok(moved.has(id), `NPC kingdom ${id} must visibly move workers`);
+      assert.ok(gathered[id] > initial.gathered[id], `NPC kingdom ${id} must physically deposit resources`);
+    }
+    return {ally: ally.id, enemy: enemy.id, gathered};
   });
   await check('real pointer selects, gathers finite timber and deposits wood', async () => {
     await start(page);
@@ -167,6 +195,25 @@ try {
     assert.equal(await page.evaluate(() => window.__DAWN__.engine.state.result), 'victory');
     assert.equal(await page.getByText('Victory', {exact: true}).first().isVisible(), true);
   });
+  await check('contextual pointer commands protect allied workers from friendly fire', async () => {
+    await start(page);
+    const fixture = await page.evaluate(() => {
+      const d = window.__DAWN__, s = d.engine.state;
+      const ally = s.players.find(p => p.id > 0 && p.team === s.players[0].team);
+      if (!ally) throw new Error('Quick skirmish must include an ally');
+      const tc = s.entities.find(e => e.owner === 0 && e.type === 'towncenter');
+      const attacker = d.engine.createUnit(0, 'infantry', tc.x - 5, tc.y - 4);
+      const target = d.engine.createUnit(ally.id, 'villager', tc.x - 5, tc.y - 1);
+      target.orders = [{type: 'hold', x: target.x, y: target.y}];
+      if (ally.ai) ally.ai.nextDecision = 1e9;
+      d.engine.step(1); return {attacker: attacker.id, target: target.id, hp: target.hp};
+    });
+    await clickEntity(page, fixture.attacker, {center: true});
+    await clickEntity(page, fixture.target, {button: 'right'});
+    assert.equal(await page.evaluate(id => window.__DAWN__.engine.get(id).orders.some(o => o.type === 'attack'), fixture.attacker), false);
+    await tick(page, 200);
+    assert.equal(await page.evaluate(id => window.__DAWN__.engine.get(id)?.hp, fixture.target), fixture.hp);
+  });
   await check('pause is frozen; a local save restores after a real reload', async () => {
     await start(page); await tick(page, 100); await page.getByTestId('pause').click();
     const tickBefore = await page.evaluate(() => window.__DAWN__.engine.state.tick);
@@ -187,7 +234,14 @@ try {
     const position = await phone.evaluate(() => {
       const d = window.__DAWN__, worker = d.engine.state.entities.find(e => e.owner === 0 && e.type === 'villager');
       d.renderer.center(worker.x, worker.y);
-      return {...d.renderer.worldToScreen(worker.x, worker.y), id: worker.id};
+      for (let r = 3; r <= 5; r++) for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+        if (Math.hypot(x, y) < 3 || Math.hypot(x, y) > 5) continue;
+        const destination = {x: Math.floor(worker.x + x) + .5, y: Math.floor(worker.y + y) + .5};
+        const screen = d.renderer.worldToScreen(destination.x, destination.y);
+        if (!d.engine.canStand(worker, destination.x, destination.y) || screen.x < 35 || screen.x > innerWidth - 35 || screen.y < 180 || screen.y > innerHeight - 280) continue;
+        return {...d.renderer.worldToScreen(worker.x, worker.y), id: worker.id, destination, target: screen};
+      }
+      throw new Error('No visible, clear phone movement target');
     });
     await phone.touchscreen.tap(position.x, position.y - 6);
     await phone.waitForTimeout(200);
@@ -197,8 +251,15 @@ try {
         const r = document.querySelector(selector).getBoundingClientRect();
         bounds[selector] = {x: r.x, y: r.y, width: r.width, height: r.height, withinViewport: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight};
       }
-      return {viewport: {width: innerWidth, height: innerHeight}, bounds, villagerSelected: window.__DAWN__.app.selected.includes(id), touchCommandPresent: !!document.querySelector('[data-testid="touch-order"]')};
+      return {viewport: {width: innerWidth, height: innerHeight}, bounds, villagerSelected: window.__DAWN__.app.selected.includes(id), touchCommandPresent: !!document.querySelector('[data-testid="touch-order"]'), touchOrderAccepted: false, touchMoved: false};
     }, position.id);
+    if (survey.touchCommandPresent) {
+      await phone.getByTestId('touch-order').tap();
+      await phone.touchscreen.tap(position.target.x, position.target.y);
+      survey.touchOrderAccepted = await phone.evaluate(id => window.__DAWN__.engine.get(id)?.orders.some(order => order.type === 'move'), position.id);
+      await tick(phone, 250);
+      survey.touchMoved = await phone.evaluate(({id, destination}) => {const e = window.__DAWN__.engine.get(id); return e && Math.hypot(e.x - destination.x, e.y - destination.y) < 1.5;}, position);
+    }
     report.mobile = survey;
     await phone.screenshot({path: resolve(output, 'dawn-live-mobile-game.png')});
     if (process.env.LIVE_REQUIRE_TOUCH === '1') {
@@ -206,6 +267,8 @@ try {
       assert.ok(survey.bounds['#commands'].width >= 100, 'command panel must remain usable');
       assert.equal(survey.villagerSelected, true, 'native touch must select a villager');
       assert.equal(survey.touchCommandPresent, true, 'touch must expose a command gesture');
+      assert.equal(survey.touchOrderAccepted, true, 'native touch must issue an actual movement order');
+      assert.equal(survey.touchMoved, true, 'the commanded worker must reach the touched ground');
     }
     return survey;
   });
