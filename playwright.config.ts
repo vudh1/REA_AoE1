@@ -1,6 +1,12 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
+// Both the readiness probe and Chromium must reach this local server directly.
+// Preserve existing bypasses when a managed environment supplies an HTTP proxy.
+for (const key of ['NO_PROXY', 'no_proxy']) {
+  process.env[key] = [...new Set([...(process.env[key] ?? '').split(',').filter(Boolean), '127.0.0.1', 'localhost'])].join(',');
+}
+
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   (!process.env.PLAYWRIGHT_USE_BUNDLED_CHROMIUM && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
 

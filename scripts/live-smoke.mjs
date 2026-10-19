@@ -214,6 +214,29 @@ try {
     await tick(page, 200);
     assert.equal(await page.evaluate(id => window.__DAWN__.engine.get(id)?.hp, fixture.target), fixture.hp);
   });
+  await check('illustrated portrait and complete inventory decode their bundled atlas', async () => {
+    await start(page);
+    const worker = await page.evaluate(() => window.__DAWN__.engine.state.entities.find(e => e.owner === 0 && e.type === 'villager').id);
+    await clickEntity(page, worker, {center: true});
+    assert.equal(await page.getByTestId('illustrated-portrait').locator('[data-art="villager"]').isVisible(), true);
+    await page.getByTestId('inventory-toggle').click();
+    const inventory = page.getByTestId('inventory-panel');
+    await inventory.waitFor({state: 'visible'});
+    const detail = await inventory.evaluate(async element => {
+      const counts = Object.fromEntries(['resource', 'unit', 'building', 'technology'].map(kind => [kind, element.querySelectorAll(`[data-inventory-kind="${kind}"]`).length]));
+      const urls = [...new Set([...element.querySelectorAll('[data-art]')].map(art => getComputedStyle(art).backgroundImage.match(/^url\(["']?(.*?)["']?\)$/)?.[1]).filter(Boolean))];
+      const atlases = await Promise.all(urls.map(async url => {const image = new Image(); image.src = url; await image.decode(); return {url, width: image.naturalWidth, height: image.naturalHeight};}));
+      return {counts, atlases, villagerAvailable: element.querySelector('[data-inventory-kind="unit"][data-inventory-key="villager"]')?.getAttribute('data-availability'), heavyAvailable: element.querySelector('[data-inventory-kind="unit"][data-inventory-key="heavy"]')?.getAttribute('data-availability')};
+    });
+    assert.deepEqual(detail.counts, {resource: 4, unit: 8, building: 14, technology: 11});
+    assert.equal(detail.atlases.length, 1);
+    assert.ok(detail.atlases[0].width >= 600 && detail.atlases[0].width === detail.atlases[0].height);
+    assert.equal(detail.villagerAvailable, 'available'); assert.equal(detail.heavyAvailable, 'locked');
+    await page.screenshot({path: resolve(output, 'dawn-live-inventory.png')});
+    await page.getByRole('button', {name: 'Close', exact: true}).click();
+    assert.equal(await page.evaluate(() => window.__DAWN__.engine.state.paused), false);
+    return detail;
+  });
   await check('pause is frozen; a local save restores after a real reload', async () => {
     await start(page); await tick(page, 100); await page.getByTestId('pause').click();
     const tickBefore = await page.evaluate(() => window.__DAWN__.engine.state.tick);

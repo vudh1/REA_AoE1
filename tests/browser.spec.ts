@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { BuildingType, Command, Entity, GameState, MatchSettings, Point, UnitType } from '../src/game/types';
+import { BUILDINGS, TECHS, UNITS } from '../src/game/data';
 
 interface DawnDebug {
   engine: {
@@ -237,10 +238,39 @@ test('right click on an allied unit never attacks or damages it', async ({ page 
   expect(await page.evaluate(id => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.get(id)?.hp, fixture.target)).toBe(fixture.hp);
 });
 
+test('illustrated selection and complete inventory load their atlas and explain current availability', async ({ page }) => {
+  const failures: string[] = [];
+  page.on('response', response => {if (response.status() >= 400) failures.push(`${response.status()} ${response.url()}`);});
+  await start(page);
+  const worker = await page.evaluate(() => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state.entities.find(e => e.owner === 0 && e.type === 'villager')!.id);
+  await clickEntity(page, worker, {center: true});
+  await expect(page.getByTestId('illustrated-portrait').locator('[role="img"][data-art="villager"]')).toBeVisible();
+  await page.getByTestId('inventory-toggle').click();
+  const inventory = page.getByTestId('inventory-panel');
+  await expect(inventory).toBeVisible();
+  for (const [kind, entries] of [['resource', ['food', 'wood', 'gold', 'stone']], ['unit', Object.keys(UNITS)], ['building', Object.keys(BUILDINGS)]] as const) {
+    await expect(inventory.locator(`[data-inventory-kind="${kind}"]`)).toHaveCount(entries.length);
+    for (const key of entries) await expect(inventory.locator(`[data-inventory-kind="${kind}"][data-inventory-key="${key}"] .inventory-portrait [role="img"]`)).toHaveCount(1);
+  }
+  await expect(inventory.locator('[data-inventory-kind="technology"]')).toHaveCount(Object.keys(TECHS).length);
+  await expect(inventory.locator('[data-inventory-kind="unit"][data-inventory-key="villager"]')).toHaveAttribute('data-availability', 'available');
+  await expect(inventory.locator('[data-inventory-kind="unit"][data-inventory-key="heavy"]')).toHaveAttribute('data-availability', 'locked');
+  const atlas = await inventory.evaluate(async element => {
+    const urls = [...new Set([...element.querySelectorAll('[data-art]')].map(art => getComputedStyle(art).backgroundImage.match(/^url\(["']?(.*?)["']?\)$/)?.[1]).filter((url): url is string => !!url))];
+    return Promise.all(urls.map(async url => {const image = new Image(); image.src = url; await image.decode(); return {url, width: image.naturalWidth, height: image.naturalHeight};}));
+  });
+  expect(atlas, 'The illustrated catalog uses the bundled atlas').toHaveLength(1);
+  expect(atlas[0]!.width).toBeGreaterThanOrEqual(600);
+  expect(atlas[0]!.height).toBe(atlas[0]!.width);
+  expect(failures, 'Illustration assets must be present at the packaged deployment path').toEqual([]);
+  await page.getByRole('button', {name: 'Close', exact: true}).click();
+  expect(await page.evaluate(() => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state.paused)).toBe(false);
+});
+
 test.describe('phone controls', () => {
   test.use({viewport: {width: 390, height: 844}, deviceScaleFactor: 2, hasTouch: true, isMobile: true});
 
-  test('native touch can select and command a villager with the HUD inside the screen', async ({ page }) => {
+  test('native touch selects, orders, pans and builds with the HUD inside the screen', async ({ page }) => {
     await page.goto('/aoe1/'); await page.getByTestId('quick-start').tap();
     await page.waitForFunction(() => !!(window as unknown as {__DAWN__?: DawnDebug}).__DAWN__?.engine);
     const setup = await page.evaluate(() => {
@@ -267,6 +297,40 @@ test.describe('phone controls', () => {
       return Math.hypot(e.x - destination.x, e.y - destination.y);
     }, {id: setup.id, destination: setup.destination});
     expect(distance).toBeLessThan(1.5);
+    const beforeSwipe = await page.evaluate(id => {
+      const d = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__, worker = d.engine.get(id)!;
+      return {point: d.renderer.worldToScreen(worker.x, worker.y), orders: JSON.stringify(worker.orders)};
+    }, setup.id);
+    const touch = await page.context().newCDPSession(page);
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 90, y: 260}]});
+    for (let i = 1; i <= 5; i++) await touch.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 90 + i * 15, y: 260 + i * 8}]});
+    await touch.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+    const afterSwipe = await page.evaluate(id => {
+      const d = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__, worker = d.engine.get(id)!;
+      return {point: d.renderer.worldToScreen(worker.x, worker.y), orders: JSON.stringify(worker.orders)};
+    }, setup.id);
+    expect(Math.hypot(afterSwipe.point.x - beforeSwipe.point.x, afterSwipe.point.y - beforeSwipe.point.y)).toBeGreaterThan(30);
+    expect(afterSwipe.orders, 'A pan must not issue a move on release').toBe(beforeSwipe.orders);
+    await page.getByTestId('touch-select').tap();
+    const house = await page.evaluate(id => {
+      const d = (window as unknown as {__DAWN__: DawnDebug}).__DAWN__, worker = d.engine.get(id)!;
+      const tc = d.engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+      d.renderer.center(worker.x, worker.y);
+      const from = d.renderer.worldToScreen(worker.x, worker.y);
+      for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++) {
+        if (Math.hypot(x, y) < 5 || Math.hypot(x, y) > 8) continue;
+        const origin = {x: Math.floor(tc.x + x), y: Math.floor(tc.y + y)};
+        if (d.engine.canPlace(0, 'house', origin.x, origin.y).ok) return {from, site: {x: origin.x + 1, y: origin.y + 1}};
+      }
+      throw new Error('No clear phone construction site');
+    }, setup.id);
+    await page.touchscreen.tap(house.from.x, house.from.y - 6);
+    await page.getByTestId('build-house').tap();
+    const housePoint = await point(page, house.site, true);
+    await page.touchscreen.tap(housePoint.x, housePoint.y);
+    await expect.poll(() => page.evaluate(site => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state.entities.some(e => e.owner === 0 && e.type === 'house' && !e.completed && Math.hypot(e.x - site.x, e.y - site.y) < .1), house.site)).toBe(true);
+    await tick(page, 2000);
+    expect(await page.evaluate(site => (window as unknown as {__DAWN__: DawnDebug}).__DAWN__.engine.state.entities.some(e => e.owner === 0 && e.type === 'house' && e.completed && Math.hypot(e.x - site.x, e.y - site.y) < .1), house.site)).toBe(true);
     const bounds = await page.evaluate(() => {
       const pause = document.querySelector('[data-testid="pause"]')!.getBoundingClientRect();
       const commands = document.querySelector('#commands')!.getBoundingClientRect();
@@ -276,5 +340,6 @@ test.describe('phone controls', () => {
     expect(bounds.commandsWidth, 'Construction and military commands retain usable space').toBeGreaterThanOrEqual(100);
     await page.getByTestId('pause').tap();
     await expect(page.getByTestId('resume')).toBeVisible();
+    await touch.detach();
   });
 });

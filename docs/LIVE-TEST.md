@@ -26,8 +26,8 @@ hostname verification. Proxy credentials and CA material are never written into
 the repository or report.
 
 The report, `dawn-live-report.json`, records each result, browser version, runtime
-exceptions, failed HTTP assets, and mobile control bounds. The four screenshot
-files are `dawn-live-menu.png`, `dawn-live-game.png`,
+exceptions, failed HTTP assets, and mobile control bounds. Screenshot files are
+`dawn-live-menu.png`, `dawn-live-game.png`, `dawn-live-inventory.png`,
 `dawn-live-mobile-menu.png`, and `dawn-live-mobile-game.png`.
 
 ## What the checks prove
@@ -41,8 +41,10 @@ files are `dawn-live-menu.png`, `dawn-live-game.png`,
   deposit it. Construction, unit production, Shift selection, movement, and
   combat affect the simulation.
 - Pause freezes simulation. A browser-local save survives a real page reload.
+- The illustrated selection portrait and all 37 inventory cards decode their
+  bundled atlas. Available and age-locked units show their current requirements.
 - A 390 × 844 touch viewport can enter a match; the report measures the available
-  HUD and command space and attempts native touch selection.
+  HUD and command space and attempts native touch selection and movement.
 - No tested page produces an uncaught exception or a missing HTTP asset.
 
 The economy checks accelerate ordinary simulation ticks after issuing real
@@ -69,3 +71,19 @@ ended at x = 502.7, outside the viewport, while the command column collapsed to
 and provided no touch command gesture. These findings justify responsive HUD
 and touch-order regression checks; desktop-only startup does not establish
 phone playability.
+
+## Improved build validation
+
+All 10 Playwright browser tests passed against the production Pages package,
+including both entry paths, real desktop economy and combat controls, autonomous
+enemy and allied workers, friendly-fire protection, all illustrated catalog
+cards, pause, and save restoration. The phone regression uses native touch to
+select and move a villager, swipe the camera without accidentally issuing an
+order, place and complete a house, and open Pause. The pause button stays inside
+the 390 × 844 viewport and the command panel retains usable width.
+
+Playwright preserves the managed environment's existing proxy bypasses and adds
+`127.0.0.1` and `localhost` for its local web-server readiness checks. Without
+that bypass, a proxy-generated response could be mistaken for an already
+running local server. A fresh-server startup check passed with the normal
+`npm run test:browser` command after this configuration fix.
