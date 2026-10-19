@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "file": "inventory-atlas.png",
+      "title": "Dawn of Kingdoms illustrated inventory",
+      "origin": "Original AI-generated artwork created for this project with OpenAI image generation. No commercial-game artwork or extracted game assets were used.",
+      "license": "Apache-2.0",
+      "licenseFile": "../LICENSE",
+      "created": "2026-10-19",
+      "width": 1254,
+      "height": 1254,
+      "columns": 6,
+      "rows": 6,
+      "cellWidth": 209,
+      "cellHeight": 209,
+      "keys": [
+        ["food", "wood", "gold", "stone", "villager", "scout"],
+        ["infantry", "spearman", "archer", "cavalry", "heavy", "siege"],
+        ["towncenter", "house", "granary", "storage", "farm", "market"],
+        ["barracks", "range", "stable", "workshop", "tower", "wall"],
+        ["gate", "academy", "gather", "carry", "tech-infantry", "tech-ranged"],
+        ["tech-armor", "tech-health", "tech-durability", "tech-tower", "rally", "age"]
+      ],
+      "runtime": "Bundled static asset. No external runtime service or paid API is required."
+    }
+  ]
+}
