@@ -28,6 +28,8 @@ Browser tests use `/usr/bin/chromium` when present. Set `PLAYWRIGHT_CHROMIUM_EXE
 
 Validation passed **99 simulation tests across 6 files** and **10 production Chromium gameplay tests**, including autonomous allied/enemy economies, team-safe commands, all 37 catalog entries, and native phone selection/orders/panning/construction, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
 
+The new five-civilization hard-mode soak completed 30 simulated minutes across two matches (18.325 minutes to conquest, then 11.675 minutes), with 181 invariant checks, 19 attack waves and 12,410 validated commands without rejection or invalid state. Enemy and allied economies gathered and grew using normal costs. This accelerated simulation check is separate from real-time browser performance.
+
 ## Controls
 
 | Input | Action |
