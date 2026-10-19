@@ -176,4 +176,125 @@ describe('AI uses the shared rules and its own discoveries', () => {
     updateAI(engine);
     expect(spy.mock.calls.some(([, c]) => c.type === 'order' && c.ids.length === 6 && c.order.type === 'attackMove' && c.order.x === raider.x)).toBe(true);
   });
+
+  it('never treats a visible allied settlement as an enemy objective', () => {
+    const engine = new Engine({ ...DEFAULT_SETTINGS, allies: 1, opponents: 1, seed: 'ALLIED-OBJECTIVES', size: 'small' });
+    engine.state.players[1]!.ai = undefined;
+    const ally = engine.state.players[2]!;
+    const home = engine.state.entities.find(e => e.owner === ally.id && e.type === 'towncenter')!;
+    const human = engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const soldiers = Array.from({ length: 6 }, (_, i) => engine.createUnit(ally.id, 'infantry', home.x - 5 + i, home.y + 5));
+    expect(engine.areAllied(0, ally.id)).toBe(true);
+    expect(engine.isVisible(ally.id, human)).toBe(true);
+    const spy = vi.spyOn(engine, 'command');
+    updateAI(engine);
+    const attacks = spy.mock.calls.filter(([owner, c]) => owner === ally.id && c.type === 'order' && c.ids.some(id => soldiers.some(s => s.id === id)) && (c.order.type === 'attack' || c.order.type === 'attackMove'));
+    expect(attacks.length).toBeGreaterThan(0);
+    expect(attacks.some(([, c]) => c.type === 'order' && (c.order.target === human.id || c.order.x === human.x && c.order.y === human.y))).toBe(false);
+  });
+
+  it('rejects friendly attack commands and ignores allied units during attack move', () => {
+    const engine = new Engine({ ...DEFAULT_SETTINGS, allies: 1, opponents: 1, seed: 'NO-FRIENDLY-FIRE', size: 'small' });
+    for (const p of engine.state.players) p.ai = undefined;
+    const home = engine.state.entities.find(e => e.owner === 2 && e.type === 'towncenter')!;
+    const guard = engine.createUnit(2, 'infantry', home.x + 6, home.y + 4);
+    const human = engine.createUnit(0, 'villager', guard.x + 0.6, guard.y);
+    const health = human.hp;
+    expect(engine.command(2, { type: 'order', ids: [guard.id], order: { type: 'attack', target: human.id, x: human.x, y: human.y } }).ok).toBe(false);
+    expect(engine.command(2, { type: 'order', ids: [guard.id], order: { type: 'attackMove', x: human.x + 2, y: human.y } }).ok).toBe(true);
+    engine.step(20 * 10);
+    expect(human.hp).toBe(health);
+    expect(guard.orders.every(order => order.type !== 'attack' || order.target !== human.id)).toBe(true);
+  });
+
+  it('sends allied soldiers to defend a human settlement against a shared visible hostile', () => {
+    const engine = new Engine({ ...DEFAULT_SETTINGS, allies: 1, opponents: 2, seed: 'ALLIED-DEFENSE', size: 'small' });
+    engine.state.players[1]!.ai = undefined;
+    engine.state.players[2]!.ai = undefined;
+    const ally = engine.state.players[3]!;
+    const home = engine.state.entities.find(e => e.owner === ally.id && e.type === 'towncenter')!;
+    const human = engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const soldiers = Array.from({ length: 6 }, (_, i) => engine.createUnit(ally.id, 'infantry', home.x - 5 + i, home.y + 5));
+    const raider = engine.createUnit(1, 'infantry', human.x + 5, human.y + 5);
+    expect(engine.isHostile(1, 2)).toBe(true);
+    expect(engine.isHostile(ally.id, 1)).toBe(true);
+    expect(engine.isHostile(ally.id, 0)).toBe(false);
+    expect(engine.isVisible(ally.id, raider)).toBe(true);
+    const spy = vi.spyOn(engine, 'command');
+    updateAI(engine);
+    expect(ally.ai!.phase).toBe('defend');
+    expect(spy.mock.calls.some(([owner, c]) => owner === ally.id && c.type === 'order' && soldiers.every(s => c.ids.includes(s.id)) && c.order.type === 'attackMove' && c.order.x === raider.x && c.order.y === raider.y)).toBe(true);
+  });
+
+  it('does not invent threats outside shared sight', () => {
+    const engine = new Engine({ ...DEFAULT_SETTINGS, allies: 1, opponents: 1, seed: 'ALLIED-FOG', size: 'small' });
+    engine.state.players[1]!.ai = undefined;
+    const ally = engine.state.players[2]!;
+    const human = engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const raider = engine.createUnit(1, 'infantry', human.x + 5, human.y + 5);
+    const original = engine.isVisible.bind(engine);
+    vi.spyOn(engine, 'isVisible').mockImplementation((owner, entity) => entity.id === raider.id ? false : original(owner, entity));
+    const spy = vi.spyOn(engine, 'command');
+    updateAI(engine);
+    expect(ally.ai!.phase).not.toBe('defend');
+    expect(spy.mock.calls.some(([owner, c]) => owner === ally.id && c.type === 'order' && (c.order.target === raider.id || c.order.type === 'attackMove' && c.order.x === raider.x && c.order.y === raider.y))).toBe(false);
+  });
+
+  it('moves allied workers physically from the first second and grows their own paid economy', () => {
+    const engine = new Engine({ ...DEFAULT_SETTINGS, allies: 1, opponents: 1, peaceful: true, seed: 'ALLIED-ECONOMY', size: 'small' });
+    engine.state.players[1]!.ai = undefined;
+    const ally = engine.state.players[2]!;
+    const workers = engine.state.entities.filter(e => e.owner === ally.id && e.type === 'villager');
+    const starts = workers.map(worker => ({ x: worker.x, y: worker.y }));
+    engine.step(20);
+    const distances = workers.map((worker, index) => Math.hypot(worker.x - starts[index]!.x, worker.y - starts[index]!.y));
+    expect(distances.filter(distance => distance > 0.3).length).toBeGreaterThanOrEqual(3);
+    expect(distances.every(distance => distance < 3)).toBe(true);
+    expect(workers.filter(worker => worker.orders.some(order => order.type === 'gather')).length).toBeGreaterThanOrEqual(3);
+    engine.step(20 * 179);
+    expect(ally.stats.gathered).toBeGreaterThan(500);
+    expect(engine.state.entities.filter(e => e.owner === ally.id && e.type === 'villager').length).toBeGreaterThan(8);
+    expect(engine.population(ally.id).cap).toBeGreaterThan(10);
+    expect(Object.values(ally.resources).every(value => value >= 0 && Number.isFinite(value))).toBe(true);
+  }, 30_000);
+
+  it('tries another known resource when the current gather route is blocked', () => {
+    const engine = game();
+    const worker = engine.state.entities.find(e => e.owner === 0 && e.type === 'villager')!;
+    const resource = engine.state.entities.find(e => e.kind === 'resource' && e.resource === 'food' && engine.isVisible(0, e))!;
+    worker.orders = [{ type: 'gather', target: resource.id, x: resource.x, y: resource.y }];
+    worker.stuck = 4;
+    updateAI(engine);
+    expect(worker.orders[0]?.target).not.toBe(resource.id);
+    expect(['gather', 'move']).toContain(worker.orders[0]?.type);
+    expect(worker.stuck).toBe(0);
+  });
+
+  it('tries another owned dropoff after a blocked delivery without losing cargo', () => {
+    const engine = game();
+    const tc = engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const storage = engine.createBuilding(0, 'storage', tc.x + 10, tc.y + 5);
+    const worker = engine.state.entities.find(e => e.owner === 0 && e.type === 'villager')!;
+    worker.carry = 10;
+    worker.carryType = 'wood';
+    worker.orders = [{ type: 'deposit', target: tc.id, x: tc.x, y: tc.y }];
+    worker.stuck = 4;
+    updateAI(engine);
+    expect(worker.orders[0]?.type).toBe('deposit');
+    expect(worker.orders[0]?.target).toBe(storage.id);
+    expect(worker.carry).toBe(10);
+  });
+
+  it('regroups a small surviving army with real move orders and physical movement', () => {
+    const engine = game();
+    engine.state.settings.peaceful = false;
+    const home = engine.state.entities.find(e => e.owner === 0 && e.type === 'towncenter')!;
+    const soldiers = [engine.createUnit(0, 'infantry', home.x + 13, home.y + 10), engine.createUnit(0, 'infantry', home.x + 14, home.y + 10)];
+    const starts = soldiers.map(soldier => ({ x: soldier.x, y: soldier.y }));
+    updateAI(engine);
+    expect(soldiers.every(soldier => soldier.orders[0]?.type === 'move')).toBe(true);
+    expect(soldiers.every(soldier => !('owner' in soldier.orders[0]!))).toBe(true);
+    engine.step(20);
+    expect(soldiers.some((soldier, index) => Math.hypot(soldier.x - starts[index]!.x, soldier.y - starts[index]!.y) > 0.3)).toBe(true);
+  });
 });

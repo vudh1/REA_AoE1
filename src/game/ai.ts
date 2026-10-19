@@ -132,10 +132,12 @@ function allocate(engine: Engine, player: Player, workers: Entity[], known: Enti
   const sum = RESOURCES.reduce((total, r) => total + (available.has(r) ? weights[r] : 0), 0) || 1;
   for (const worker of workers) {
     const order = worker.orders[0];
-    if (order && ['build', 'repair', 'deposit', 'move'].includes(order.type)) continue;
+    const routeFailed = worker.stuck > 3;
+    const failedMove = order?.type === 'move' && routeFailed;
+    if (order && (['build', 'repair'].includes(order.type) || order.type === 'move' && !failedMove || order.type === 'deposit' && !routeFailed)) continue;
     if (worker.carry > 0) {
-      if (idle(worker) && worker.carryType) {
-        const dropoff = engine.state.entities.filter(e => e.owner === player.id && e.kind === 'building' && e.completed && BUILDINGS[e.type as BuildingType].dropoff?.includes(worker.carryType!))
+      if ((idle(worker) || routeFailed) && worker.carryType) {
+        const dropoff = engine.state.entities.filter(e => e.owner === player.id && e.kind === 'building' && e.completed && e.hp > 0 && BUILDINGS[e.type as BuildingType].dropoff?.includes(worker.carryType!) && !(routeFailed && order?.type === 'deposit' && e.id === order.target))
           .sort((a, b) => dist(worker, a) - dist(worker, b))[0];
         if (dropoff) issue(engine, player, { type: 'order', ids: [worker.id], order: { type: 'deposit', target: dropoff.id, x: dropoff.x, y: dropoff.y } });
       }
@@ -144,20 +146,21 @@ function allocate(engine: Engine, player: Player, workers: Entity[], known: Enti
     const previous = order?.target === undefined ? undefined : byId.get(order.target);
     if (previous?.resource && order?.type === 'gather') {
       const excess = counts[previous.resource] - workers.length * weights[previous.resource] / sum;
-      if (excess < 1.3) continue;
+      if (excess < 1.3 && !routeFailed) continue;
       counts[previous.resource]--;
-    } else if (order && !idle(worker) && order.type !== 'gather') continue;
+    } else if (order && !idle(worker) && order.type !== 'gather' && !failedMove && !(order.type === 'deposit' && routeFailed)) continue;
     const ranked = RESOURCES.filter(r => available.has(r)).sort((a, b) =>
       (workers.length * weights[b] / sum - counts[b]) - (workers.length * weights[a] / sum - counts[a]));
     let assigned = false;
     for (const resource of ranked) {
-      const source = sources.filter(e => e.resource === resource)
-        .sort((a, b) => dist(worker, a) + dist(home, a) * 0.2 - dist(worker, b) - dist(home, b) * 0.2)[0];
+      const candidates = sources.filter(e => e.resource === resource && !(routeFailed && e.id === order?.target))
+        .sort((a, b) => dist(worker, a) + dist(home, a) * 0.2 - dist(worker, b) - dist(home, b) * 0.2);
+      const source = candidates[routeFailed ? (Math.floor(engine.state.tick / 160) + worker.id) % Math.min(4, candidates.length || 1) : 0];
       if (!source) continue;
-      const order = engine.isVisible(player.id, source)
+      const nextOrder = engine.isVisible(player.id, source)
         ? { type: 'gather' as const, target: source.id, x: source.x, y: source.y }
         : { type: 'move' as const, x: source.x, y: source.y };
-      if (issue(engine, player, { type: 'order', ids: [worker.id], order }).ok) {
+      if (issue(engine, player, { type: 'order', ids: [worker.id], order: nextOrder }).ok) {
         counts[resource]++;
         assigned = true;
         break;
@@ -248,8 +251,12 @@ function economy(engine: Engine, player: Player, own: Entity[], known: Entity[],
 function military(engine: Engine, player: Player, own: Entity[], known: Entity[], home: Point): void {
   const brain = player.ai as Brain;
   const soldiers = own.filter(isSoldier);
-  const visibleEnemies = known.filter(e => e.owner >= 0 && e.owner !== player.id && e.hp > 0 && engine.isVisible(player.id, e));
-  const threats = engine.state.settings.peaceful ? [] : visibleEnemies.filter(e => e.kind === 'unit' && own.some(b => b.kind === 'building' && dist(b, e) < 11));
+  const visibleEnemies = known.filter(e => engine.isHostile(player.id, e.owner) && e.hp > 0 && engine.isVisible(player.id, e));
+  // Allied settlements are considered only through the sight/memory supplied by the engine.
+  const friendlyBuildings = known.filter(e => e.kind === 'building' && e.hp > 0 && engine.areAllied(player.id, e.owner));
+  const threats = engine.state.settings.peaceful ? [] : visibleEnemies.filter(e => e.kind === 'unit' && friendlyBuildings.some(b => dist(b, e) < 11));
+  const refuge = (unit: Entity): Point => friendlyBuildings.filter(b => b.completed && b.type === 'towncenter' && !visibleEnemies.some(enemy => dist(enemy, b) < 6))
+    .sort((a, b) => dist(a, unit) - dist(b, unit))[0] || home;
   const threatened = threats.length > 0;
   const workerCount = own.filter(isWorker).length;
   const desired = engine.state.settings.peaceful ? Math.min(9, player.age * 2 + 1)
@@ -275,7 +282,8 @@ function military(engine: Engine, player: Player, own: Entity[], known: Entity[]
     brain.phase = 'defend';
     const target = threats.sort((a, b) => dist(a, home) - dist(b, home))[0];
     for (const worker of own.filter(isWorker)) {
-      if (threats.some(enemy => dist(worker, enemy) < 5) && dist(worker, home) > 3) issue(engine, player, { type: 'order', ids: [worker.id], order: { type: 'move', ...home } });
+      const shelter = refuge(worker);
+      if (threats.some(enemy => dist(worker, enemy) < 5) && dist(worker, shelter) > 3) issue(engine, player, { type: 'order', ids: [worker.id], order: { type: 'move', x: shelter.x, y: shelter.y } });
     }
     const defenders = soldiers.filter(fit);
     if (defenders.length) issue(engine, player, { type: 'order', ids: defenders.map(e => e.id), order: { type: 'attackMove', x: target.x, y: target.y } });
@@ -283,7 +291,7 @@ function military(engine: Engine, player: Player, own: Entity[], known: Entity[]
     const threshold = engine.state.settings.difficulty === 'easy' ? 8 : engine.state.settings.difficulty === 'hard' ? 5 : 6;
     const ready = soldiers.filter(fit);
     if (ready.length >= threshold && (engine.state.tick >= brain.nextAttack || brain.phase === 'attack')) {
-      const enemies = known.filter(e => e.owner >= 0 && e.owner !== player.id && e.hp > 0 && e.kind !== 'resource');
+      const enemies = known.filter(e => engine.isHostile(player.id, e.owner) && e.hp > 0 && e.kind !== 'resource');
       const enemyBuildings = enemies.filter(e => e.kind === 'building');
       const targets = enemyBuildings.length ? enemyBuildings : enemies;
       const target = targets.sort((a, b) => dist(a, home) - dist(b, home))[0];
@@ -299,11 +307,14 @@ function military(engine: Engine, player: Player, own: Entity[], known: Entity[]
     } else if (ready.length < Math.ceil(threshold / 2)) {
       brain.phase = 'recover';
       const returning = ready.filter(e => idle(e) && dist(e, home) > 6);
-      if (returning.length) issue(engine, player, { type: 'order', ids: returning.map(e => e.id), order: { type: 'move', ...home } });
+      if (returning.length) issue(engine, player, { type: 'order', ids: returning.map(e => e.id), order: { type: 'move', x: home.x, y: home.y } });
     }
   }
   const wounded = soldiers.filter(e => e.hp <= e.maxHp * 0.24 && engine.state.tick - e.lastHit <= 600 && dist(e, home) > 5 && e.orders[0]?.type !== 'move');
-  if (wounded.length) issue(engine, player, { type: 'order', ids: wounded.map(e => e.id), order: { type: 'move', ...home } });
+  for (const soldier of wounded) {
+    const shelter = refuge(soldier);
+    issue(engine, player, { type: 'order', ids: [soldier.id], order: { type: 'move', x: shelter.x, y: shelter.y } });
+  }
   const scout = own.find(e => e.type === 'scout') || (!soldiers.length ? undefined : soldiers[0]);
   if (scout && !threatened && (idle(scout) || (scout.type === 'scout' && engine.state.tick - (brain.lastExplore || 0) > 600))) {
     const point = explore(engine, player, home);
@@ -324,7 +335,7 @@ export function updateAI(engine: Engine): void {
     if (!own.length) continue;
     const home = own.find(e => e.type === 'towncenter') || own.find(isWorker) || own[0];
     const known = knowledge(engine, player);
-    const threatened = !engine.state.settings.peaceful && known.some(e => e.owner >= 0 && e.owner !== player.id && e.kind === 'unit' && engine.isVisible(player.id, e) && dist(e, home) < 12);
+    const threatened = !engine.state.settings.peaceful && known.some(e => engine.isHostile(player.id, e.owner) && e.kind === 'unit' && engine.isVisible(player.id, e) && dist(e, home) < 12);
     economy(engine, player, own, known, home, threatened);
     military(engine, player, own, known, home);
   }
