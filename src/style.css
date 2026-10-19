@@ -12,7 +12,7 @@
 @media(pointer:coarse){#touch-controls{display:flex}}
 @media(max-width:700px){
  #topbar{height:99px;display:grid;grid-template-columns:1fr repeat(3,44px);grid-template-rows:45px 48px;gap:0 2px;padding:3px 8px;align-items:center}
- .brand{min-width:0;width:max-content;padding:0;gap:6px}.brand span{display:block;font-size:11px;letter-spacing:2px}.brand span small{font-size:6px;margin-top:2px}.brand svg{width:25px}
+ .brand{grid-row:1;grid-column:1;justify-self:start;min-width:0;width:max-content;padding:0;gap:6px}.brand span{display:block;font-size:11px;letter-spacing:2px}.brand span small{font-size:6px;margin-top:2px}.brand svg{width:25px}
  #resources{grid-row:2;grid-column:1/-1;justify-content:space-between;gap:3px;min-width:0}#resources .resource{min-width:0;gap:4px;flex:1}.resource-art{--art-size:25px}.resource strong{font-size:15px}.resource div>span{font-size:6px;letter-spacing:.4px}.population{padding-left:4px}.population svg{width:18px}.population strong{font-size:13px}.population strong small{font-size:9px}
  #age-clock{grid-row:1;grid-column:1;justify-self:end;margin-right:10px;min-width:0;padding-left:8px}#age-clock span{font-size:6px;letter-spacing:.7px}#age-clock strong{font-size:11px;margin-top:3px;letter-spacing:1px}#topbar>.icon-button{width:44px;height:44px;grid-row:1;padding:10px}#topbar>.icon-button:nth-last-child(3){grid-column:2}#topbar>.icon-button:nth-last-child(2){grid-column:3}#topbar>.icon-button:last-child{grid-column:4}
  #match-ribbon{top:106px;left:10px;right:10px;font-size:6px;letter-spacing:.4px;gap:8px}#match-ribbon button{font-size:6px;padding:5px;min-height:30px}#match-label{max-width:66%;line-height:1.5}
