@@ -1,4 +1,4 @@
-/** Accelerated headless matches: npm run soak -- --minutes=30 [--peaceful]. */
+/** Accelerated headless matches: npm run soak -- --minutes=30 [--peaceful] [--allies=0|1]. */
 import { Engine } from '../src/game/engine';
 import { DEFAULT_SETTINGS, type AIState, type Command, type Resource } from '../src/game/types';
 
@@ -7,8 +7,11 @@ const minutes = Number(argument('minutes') || 30);
 if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 240) throw new Error('minutes must be between 0 and 240');
 const seed = argument('seed') || 'AURELIA-SOAK-2026';
 const peaceful = process.argv.includes('--peaceful');
+const allies = Number(argument('allies') ?? 0);
+if (allies !== 0 && allies !== 1) throw new Error('allies must be 0 or 1');
 const difficulty = (argument('difficulty') || 'hard') as 'easy' | 'normal' | 'hard';
 if (!['easy', 'normal', 'hard'].includes(difficulty)) throw new Error('Invalid difficulty');
+const settings = {...DEFAULT_SETTINGS, seed, size: 'small' as const, opponents: 3, allies, population: 100 as const, difficulty, peaceful};
 const targetTicks = Math.ceil(minutes * 60 * 20);
 let simulatedTicks = 0, maxEntities = 0, maxPopulation = 0, checks = 0, commands = 0, failures = 0, attacks = 0;
 let nextReport = 6000;
@@ -17,7 +20,7 @@ const matches: unknown[] = [];
 const start = performance.now();
 
 while (simulatedTicks < targetTicks) {
-  const engine = new Engine({ ...DEFAULT_SETTINGS, seed: `${seed}:${matches.length}`, size: 'small', opponents: 3, population: 100, difficulty, peaceful });
+  const engine = new Engine({...settings, seed: `${seed}:${matches.length}`});
   // The harness gives the human seat the identical policy, never resources or units.
   for (const player of engine.state.players) player.ai = { nextDecision: player.id * 7, phase: 'opening', nextAttack: 0, scoutIndex: 0, lastBuild: 0 };
   const command = engine.command.bind(engine);
@@ -69,17 +72,18 @@ while (simulatedTicks < targetTicks) {
   }
   matches.push({
     seed: engine.state.settings.seed,
+    settings: engine.state.settings,
     simulatedMinutes: Number((engine.state.tick / 1200).toFixed(3)),
     result: engine.state.result,
     players: engine.state.players.map(player => {
       const brain = player.ai as AIState & { attacks?: number };
       attacks += brain.attacks || 0;
-      return { id: player.id, age: highAges[player.id], population: engine.population(player.id), resources: player.resources, stats: player.stats, attacks: brain.attacks || 0, defeated: player.defeated };
+      return { id: player.id, team: player.team ?? player.id, age: highAges[player.id], population: engine.population(player.id), resources: player.resources, stats: player.stats, attacks: brain.attacks || 0, defeated: player.defeated };
     }),
   });
 }
 console.log(JSON.stringify({
-  seed, peaceful, difficulty, requestedMinutes: minutes, simulatedMinutes: simulatedTicks / 1200,
+  seed, peaceful, difficulty, allies, settings, requestedMinutes: minutes, simulatedMinutes: simulatedTicks / 1200,
   wallSeconds: Number(((performance.now() - start) / 1000).toFixed(3)),
   invariantChecks: checks, maxEntities, maxPopulation, commands, failures, failedReasons, attacks, matches,
 }, null, 2));
