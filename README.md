@@ -1,6 +1,6 @@
 # Dawn of Kingdoms
 
-An original, single-player ancient-world browser RTS. One human civilization faces up to three local computer opponents. The entire game runs in the browser: economy, construction, pathfinding, fog, combat, research, procedural artwork, and synthesized audio. It has no backend, account, telemetry, paid API, or required runtime network service.
+An original, single-player ancient-world browser RTS. One human civilization plays alongside an optional allied village and faces up to three independent computer opponents. The entire game runs in the browser: economy, construction, pathfinding, fog, combat, research, procedural artwork, and synthesized audio. It has no backend, account, telemetry, paid API, or required runtime network service.
 
 ## Play and develop
 
@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. Quick Skirmish starts one human versus one AI. Custom Skirmish changes seed, map, opponents, civilization, difficulty, resources, population, speed, and peaceful sandbox. Tutorial uses the same simulation. Desktop mouse and keyboard are the primary controls.
+Open the URL printed by Vite. Quick Skirmish creates your village, one allied village and one enemy village automatically. Each computer village starts with its own Town Center, five villagers and a scout; workers gather finite resources, carry cargo home, deposit it, and pay normal building/training costs. Allies share scouting, defend visible friendly settlements, pass friendly gates and never damage teammates. Enemy civilizations remain independent rivals. Custom Skirmish changes seed, map, opponents, allies, civilization, difficulty, resources, population, speed, and peaceful sandbox. Tutorial uses the same simulation. Desktop mouse/keyboard and touch controls are supported. On a phone, tap to select, tap **Order**, then tap a target; swipe to pan, and use **+ / −** to zoom.
 
 ```sh
 npm run typecheck
@@ -24,7 +24,7 @@ npm run soak -- --minutes=30
 
 Browser tests use `/usr/bin/chromium` when present. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` for another installed executable, or `PLAYWRIGHT_USE_BUNDLED_CHROMIUM=1` to use Playwright's downloaded version. CI installs its matching Chromium and required Linux libraries.
 
-Validation passed **78 simulation tests across 5 files** and **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
+Validation passed **99 simulation tests across 6 files** and the previously published **6 production Chromium gameplay tests**, with TypeScript checking and a production build also passing. At 1080p on the documented headless software renderer, final crowded-combat profiles measured **28.14 FPS / 200 units** and **19.20 FPS / 400 units**; the 60 FPS target remains unmet. Pointer acknowledgment p95 at match start was **73 ms** across 10 samples. See [the performance report](docs/PERFORMANCE.md) for frame percentiles, memory observations, reproducible scenarios, and remaining real-device checks.
 
 ## Controls
 
@@ -32,6 +32,11 @@ Validation passed **78 simulation tests across 5 files** and **6 production Chro
 | --- | --- |
 | Left click / drag | Select one / box-select units |
 | Shift + left click | Add or remove selection |
+| Double click / double tap a unit | Select visible units of that type |
+| Touch Select / Order | Tap to select / issue contextual commands |
+| Touch swipe / + and − | Pan / zoom |
+| Shift + click a training button | Queue up to five units using normal costs |
+| I / illustrated inventory button | Open the pictured catalog of resources, units, buildings and technologies |
 | Right click | Contextual move, attack, gather, construct, repair, or deposit |
 | Shift + right click | Queue contextual orders |
 | Mouse wheel | Zoom |
@@ -68,12 +73,13 @@ npm run profile
 
 Vite uses relative asset URLs. The Pages artifact serves the same game at the project root and nested `aoe1/` directory. Both roots include LICENSE and ASSETS.md attribution files.
 
-- Intended repository URL: `https://vudh1.github.io/REA_AoE1/`
-- Project subpath: `https://vudh1.github.io/REA_AoE1/aoe1/`
+- Requested canonical endpoint: `https://vudh1.github.io/aoe1/` (lowercase).
+- Current repository endpoint: `https://vudh1.github.io/REA_AoE1/`.
+- Current nested compatibility path: `https://vudh1.github.io/REA_AoE1/aoe1/`.
 
-The separately requested `https://vudh1.github.io/aoe1/` belongs to another GitHub project path. A deployment from `REA_AoE1` cannot claim that sibling route. To use that exact URL, publish the static artifact from a repository named `aoe1`, or add its `aoe1/` directory to the `vudh1.github.io` user-site repository. Neither repository is modified automatically.
+GitHub Pages uses the repository name as the project path. To activate the requested canonical endpoint, rename this same repository to exactly `aoe1` in **Settings → General → Repository name → Rename**, then redeploy the Pages workflow. On an iPhone, open the repository Settings URL in Safari if the GitHub app does not show the setting. The relative asset paths already support the rename. Update local Git remotes after GitHub confirms the new name; existing browser saves stay on the same `vudh1.github.io` origin.
 
-The earlier public-site verification request returned proxy HTTP 403 and GitHub API access was forbidden. The committed workflow is deployment configuration, not evidence that a site is live. See the final handoff for any later push/deployment status.
+The current root and nested site were tested in Chromium with normal TLS verification: finite wood gathering/deposit, construction/training/group movement, conquest, custom/tutorial, pause and save/reload all worked without missing assets or uncaught exceptions. The canonical `/aoe1/` path returned 404 before the rename. An integration attempt to rename the repository returned GitHub HTTP 403, `Resource not accessible by integration`; code access does not grant this repository-admin operation. See [live-site test notes](docs/LIVE-TEST.md) for the baseline and subsequent validation.
 
 ## Cost and limits
 
@@ -85,8 +91,8 @@ Hosting assumes a public repository eligible for free GitHub Pages and standard 
 - [Asset and dependency manifest](docs/ASSETS.md)
 - [Performance measurements, targets, and limitations](docs/PERFORMANCE.md)
 
-Source and original procedural artwork/audio use the [Apache License 2.0](LICENSE). Dawn of Kingdoms is an independent game inspired by historical themes and classic RTS mechanics; it is not an official Age of Empires release and contains no commercial-game assets.
+Source and original artwork/audio use the [Apache License 2.0](LICENSE). Dawn of Kingdoms is an independent game inspired by historical themes and classic RTS mechanics; it is not an official Age of Empires release and contains no commercial-game assets.
 
 ## Release scope and limitations
 
-This release focuses on desktop single-player land skirmishes. Water is decorative and impassable; there are no naval units, multiplayer, diplomacy, campaign, or cloud saves. Art and sound use compact original procedural primitives. Balance and the target 20–40 minute match duration need player feedback. The final headless software-renderer measurements miss the frame-rate targets. Low/Auto graphics reduce cosmetic cost; Custom Game offers Small maps, one rival, and a 50-person cap for smaller matches. Representative integrated-GPU desktop and 30-minute real-time browser measurements remain required. No universal 60 FPS guarantee is made.
+This release focuses on single-player land skirmishes with mouse, keyboard and phone touch controls. Water is decorative and impassable; there are no naval units, multiplayer, in-match diplomacy changes, campaign, or cloud saves. World art uses original cached Canvas sprites with ancient courtyard buildings, worker tool animations and visible cargo. Thirty-six original painted inventory illustrations are bundled locally; the catalog shows actual costs, prerequisites and availability. Sound uses synthesized Web Audio. Balance and the target 20–40 minute match duration need player feedback. The final headless software-renderer measurements miss the frame-rate targets. Low/Auto graphics reduce cosmetic cost; Custom Game offers Small maps, one rival, and a 50-person cap for smaller matches. Representative integrated-GPU desktop and 30-minute real-time browser measurements remain required. No universal 60 FPS guarantee is made.

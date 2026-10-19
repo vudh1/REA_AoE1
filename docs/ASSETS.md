@@ -5,7 +5,8 @@ No external art, fonts, sprite sheets, music, voices, maps, or commercial-game d
 | Material | Origin | License / redistribution |
 | --- | --- | --- |
 | Game source, interface, simulation, tests | Original repository work | Apache-2.0; see `LICENSE` |
-| Terrain, unit silhouettes, buildings, icons, effects | Original Canvas drawing code | Apache-2.0 |
+| Terrain, animated workers and cargo, ancient courtyard buildings, interface icons, effects | Original Canvas drawing code | Apache-2.0 |
+| `public/assets/inventory-atlas.png` | Original generated 6 × 6 painted atlas: resources, units, buildings, upgrades | Apache-2.0; see `public/assets/manifest.json` |
 | `public/favicon.svg` | Original sun motif in SVG geometry | Apache-2.0 |
 | Sound effects and synthesized ambience | Original Web Audio synthesis | Apache-2.0 |
 | Maps | Seeded procedural generation | Apache-2.0 generator; saved maps in JSON |

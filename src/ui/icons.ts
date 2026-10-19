@@ -1,5 +1,6 @@
 export function icon(name:string,size=22):string {
 const paths:Record<string,string>={
+ box:'<path d="M3 8h18v13H3ZM2 3h20v5H2Zm7 8h6"/>',
  food:'<path d="M12 4c-3-3-7 0-7 4 0 7 5 11 7 11s7-4 7-11c0-4-4-7-7-4Z"/><path d="M12 5c0-3 2-4 4-4M12 4 9 1"/>',
  wood:'<path d="m12 2 7 9h-4l6 7H3l6-7H5Z"/><path d="M12 18v4"/>',
  gold:'<path d="m8 4 8 0 6 15H2Z"/><path d="m8 4 3 15m5-15-5 15M5 11h14"/>',
